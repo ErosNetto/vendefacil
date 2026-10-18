@@ -151,7 +151,7 @@ export default function SettingsScreen() {
         />
 
         <SecondaryButton
-          label="Sair da conta (Logout)"
+          label="Sair da conta"
           onPress={() => {
             void handleSignOut();
           }}

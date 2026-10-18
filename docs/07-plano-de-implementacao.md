@@ -37,11 +37,13 @@
 > **Nota de validação da Fase 4:** Execute `supabase/migrations/20261018000004_phase4_inventory.sql` no SQL Editor do Supabase para criar a tabela append-only `stock_movements` e a função atômica e idempotente `adjust_stock`.
 
 ## Fase 5 — Vendas
-- [ ] Carrinho multi-itens.
-- [ ] Snapshots de preço/custo.
-- [ ] Rascunho, confirmação e cancelamento.
-- [ ] RPC transacional com baixa de estoque.
-- [ ] Testes de retry/concorrência.
+- [x] Carrinho multi-itens (`src/app/sales/new.tsx`, `src/features/sales/schemas.ts`).
+- [x] Snapshots de preço/custo (`public.sale_items` em `supabase/migrations/20261018000005_phase5_sales.sql`, `src/app/sales/[id]/index.tsx`).
+- [x] Rascunho (criação e edição), confirmação e cancelamento (`src/app/(tabs)/sales.tsx`, `src/app/sales/new.tsx`, `src/app/sales/[id]/index.tsx`, `src/features/sales/services.ts`).
+- [x] RPC transacional com baixa de estoque (`create_or_confirm_sale`, `update_draft_sale`, `confirm_draft_sale`, `cancel_sale`).
+- [x] Testes de retry/concorrência (`supabase/tests/phase5_sales_rls_and_rpc_test.sql`, `src/features/sales/schemas.test.ts`).
+
+> **Nota de validação da Fase 5:** Execute `supabase/migrations/20261018000005_phase5_sales.sql` no SQL Editor do Supabase para criar as tabelas `sales` e `sale_items` e as RPCs transacionais `create_or_confirm_sale`, `update_draft_sale`, `confirm_draft_sale` e `cancel_sale`.
 
 ## Fase 6 — Financeiro
 - [ ] Entrada, parcelas e contas a receber.

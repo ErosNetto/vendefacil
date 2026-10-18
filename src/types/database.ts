@@ -133,6 +133,72 @@ export type AdjustStockRpcResult = {
   idempotent_replay: boolean;
 };
 
+export type SaleStatus = 'draft' | 'confirmed' | 'cancelled';
+
+export type SaleRow = {
+  id: string;
+  workspace_id: string;
+  customer_id: string | null;
+  customer_name_snapshot: string | null;
+  status: SaleStatus;
+  subtotal_cents: number;
+  discount_cents: number;
+  total_cents: number;
+  estimated_cost_cents: number;
+  estimated_profit_cents: number;
+  item_count: number;
+  notes: string | null;
+  cancellation_reason: string | null;
+  idempotency_key: string;
+  confirmed_at: string | null;
+  cancelled_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SaleItemRow = {
+  id: string;
+  workspace_id: string;
+  sale_id: string;
+  product_id: string;
+  product_name_snapshot: string;
+  sku_snapshot: string | null;
+  quantity: number;
+  unit_price_cents: number;
+  unit_cost_cents: number;
+  line_total_cents: number;
+  line_cost_cents: number;
+  created_at: string;
+};
+
+export type CreateOrConfirmSaleRpcResult = {
+  sale_id: string;
+  workspace_id: string;
+  status: SaleStatus;
+  subtotal_cents: number;
+  discount_cents: number;
+  total_cents: number;
+  estimated_profit_cents: number;
+  item_count: number;
+  created_at: string;
+  idempotent_replay: boolean;
+};
+
+export type ConfirmDraftSaleRpcResult = {
+  sale_id: string;
+  status: SaleStatus;
+  confirmed_at: string | null;
+  idempotent_replay: boolean;
+};
+
+export type CancelSaleRpcResult = {
+  sale_id: string;
+  status: SaleStatus;
+  cancelled_at: string | null;
+  idempotent_replay: boolean;
+};
+
 export type CreateWorkspaceRpcResult = {
   workspace_id: string;
   name: string;
@@ -384,6 +450,76 @@ export type Database = {
           },
         ];
       };
+      sales: {
+        Row: SaleRow;
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          customer_id?: string | null;
+          customer_name_snapshot?: string | null;
+          status?: SaleStatus;
+          subtotal_cents?: number;
+          discount_cents?: number;
+          total_cents?: number;
+          estimated_cost_cents?: number;
+          estimated_profit_cents?: number;
+          item_count?: number;
+          notes?: string | null;
+          cancellation_reason?: string | null;
+          idempotency_key: string;
+          confirmed_at?: string | null;
+          cancelled_at?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          status?: SaleStatus;
+          notes?: string | null;
+          cancellation_reason?: string | null;
+          confirmed_at?: string | null;
+          cancelled_at?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'sales_customer_workspace_fkey';
+            columns: ['customer_id', 'workspace_id'];
+            isOneToOne: false;
+            referencedRelation: 'customers';
+            referencedColumns: ['id', 'workspace_id'];
+          },
+        ];
+      };
+      sale_items: {
+        Row: SaleItemRow;
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          sale_id: string;
+          product_id: string;
+          product_name_snapshot: string;
+          sku_snapshot?: string | null;
+          quantity: number;
+          unit_price_cents: number;
+          unit_cost_cents?: number;
+          line_total_cents: number;
+          line_cost_cents?: number;
+          created_at?: string;
+        };
+        Update: {
+          quantity?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'sale_items_sale_workspace_fkey';
+            columns: ['sale_id', 'workspace_id'];
+            isOneToOne: false;
+            referencedRelation: 'sales';
+            referencedColumns: ['id', 'workspace_id'];
+          },
+        ];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -440,10 +576,50 @@ export type Database = {
         };
         Returns: AdjustStockRpcResult;
       };
+      create_or_confirm_sale: {
+        Args: {
+          p_workspace_id: string;
+          p_items: { product_id: string; quantity: number }[];
+          p_customer_id?: string | null;
+          p_discount_cents?: number;
+          p_notes?: string | null;
+          p_confirm_immediately?: boolean;
+          p_idempotency_key?: string;
+        };
+        Returns: CreateOrConfirmSaleRpcResult;
+      };
+      confirm_draft_sale: {
+        Args: {
+          p_workspace_id: string;
+          p_sale_id: string;
+        };
+        Returns: ConfirmDraftSaleRpcResult;
+      };
+      cancel_sale: {
+        Args: {
+          p_workspace_id: string;
+          p_sale_id: string;
+          p_reason: string;
+        };
+        Returns: CancelSaleRpcResult;
+      };
+      update_draft_sale: {
+        Args: {
+          p_workspace_id: string;
+          p_sale_id: string;
+          p_items: { product_id: string; quantity: number }[];
+          p_customer_id?: string | null;
+          p_discount_cents?: number;
+          p_notes?: string | null;
+          p_confirm_immediately?: boolean;
+        };
+        Returns: CreateOrConfirmSaleRpcResult;
+      };
     };
     Enums: {
       workspace_role: WorkspaceRole;
       stock_movement_type: StockMovementType;
+      sale_status: SaleStatus;
     };
     CompositeTypes: {
       [_ in never]: never;

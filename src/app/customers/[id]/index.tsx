@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
   AppHeader,
@@ -10,6 +10,7 @@ import {
   ErrorState,
   LoadingState,
   MetricCard,
+  MoneyText,
   PrimaryButton,
   Screen,
   SecondaryButton,
@@ -23,8 +24,13 @@ import {
   mapCustomerServiceError,
   setWorkspaceCustomerArchived,
 } from '@/features/customers/services';
-import type { CustomerRow } from '@/types/database';
-import { formatDateBR } from '@/utils/formatters';
+import {
+  calculateSalesOverviewMetrics,
+  SALE_STATUS_META,
+} from '@/features/sales/schemas';
+import { listWorkspaceSales } from '@/features/sales/services';
+import type { CustomerRow, SaleRow } from '@/types/database';
+import { formatDateBR, formatDateTimeBR } from '@/utils/formatters';
 
 export default function CustomerDetailScreen() {
   const router = useRouter();
@@ -33,6 +39,7 @@ export default function CustomerDetailScreen() {
   const workspaceId = activeWorkspace?.workspace.id ?? null;
 
   const [customer, setCustomer] = useState<CustomerRow | null>(null);
+  const [customerSales, setCustomerSales] = useState<SaleRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [confirmArchiveVisible, setConfirmArchiveVisible] = useState(false);
@@ -52,6 +59,15 @@ export default function CustomerDetailScreen() {
         setErrorMessage('Cliente não encontrado neste espaço de trabalho.');
       } else {
         setCustomer(record);
+        try {
+          const sales = await listWorkspaceSales({
+            workspaceId,
+            customerId: record.id,
+          });
+          setCustomerSales(sales);
+        } catch {
+          setCustomerSales([]);
+        }
       }
     } catch (error) {
       setErrorMessage(mapCustomerServiceError(error));
@@ -64,6 +80,11 @@ export default function CustomerDetailScreen() {
     useCallback(() => {
       void loadCustomer();
     }, [loadCustomer]),
+  );
+
+  const salesMetrics = useMemo(
+    () => calculateSalesOverviewMetrics(customerSales),
+    [customerSales],
   );
 
   async function handleToggleArchive(): Promise<void> {
@@ -140,7 +161,9 @@ export default function CustomerDetailScreen() {
           <View style={styles.profileTitleCol}>
             <Text style={styles.customerName}>{customer.full_name}</Text>
             <StatusBadge
-              label={customer.is_archived ? 'Cliente arquivado' : 'Cliente ativo'}
+              label={
+                customer.is_archived ? 'Cliente arquivado' : 'Cliente ativo'
+              }
               tone={customer.is_archived ? 'warning' : 'success'}
             />
           </View>
@@ -197,7 +220,19 @@ export default function CustomerDetailScreen() {
         </View>
 
         <View style={styles.actionsRow}>
-          <PrimaryButton
+          {!customer.is_archived ? (
+            <PrimaryButton
+              label="Nova venda para este cliente"
+              iconName="cart-outline"
+              onPress={() =>
+                router.push({
+                  pathname: '/sales/new',
+                  params: { customerId: customer.id },
+                })
+              }
+            />
+          ) : null}
+          <SecondaryButton
             label="Editar dados"
             iconName="create-outline"
             onPress={() => router.push(`/customers/${customer.id}/edit`)}
@@ -220,35 +255,91 @@ export default function CustomerDetailScreen() {
       <View style={styles.metricsGrid}>
         <MetricCard
           title="Total comprado"
-          cents={0}
-          subtitle="0 vendas confirmadas"
+          cents={salesMetrics.confirmedRevenueCents}
+          subtitle={
+            salesMetrics.confirmedCount === 1
+              ? '1 venda confirmada'
+              : `${salesMetrics.confirmedCount} vendas confirmadas`
+          }
           tone="default"
           iconName="bag-check-outline"
         />
         <MetricCard
           title="Total pago"
           cents={0}
-          subtitle="0 recebimentos"
+          subtitle="0 recebimentos (Fase 6)"
           tone="primary"
           iconName="cash-outline"
         />
         <MetricCard
           title="Saldo em aberto"
           cents={0}
-          subtitle="0 parcelas pendentes"
+          subtitle="0 parcelas pendentes (Fase 6)"
           tone="warning"
           iconName="time-outline"
         />
       </View>
 
       <Text style={styles.sectionTitle}>
-        Histórico de vendas, parcelas e recebimentos
+        Histórico de vendas ({customerSales.length})
       </Text>
-      <EmptyState
-        iconName="receipt-outline"
-        title="Nenhuma movimentação comercial com este cliente"
-        description="As vendas, parcelas e pagamentos vinculados a este cliente aparecerão automaticamente nesta ficha após o registro de vendas (Fases 5 e 6)."
-      />
+      {customerSales.length === 0 ? (
+        <EmptyState
+          iconName="receipt-outline"
+          title="Nenhuma venda vinculada a este cliente"
+          description="Registre uma venda para este cliente para acompanhar compras, itens e futuros recebimentos."
+          actionLabel={
+            !customer.is_archived ? 'Registrar venda agora' : undefined
+          }
+          onActionPress={
+            !customer.is_archived
+              ? () =>
+                  router.push({
+                    pathname: '/sales/new',
+                    params: { customerId: customer.id },
+                  })
+              : undefined
+          }
+        />
+      ) : (
+        <View style={styles.salesList}>
+          {customerSales.map((sale) => {
+            const statusMeta = SALE_STATUS_META[sale.status];
+            return (
+              <Pressable
+                key={sale.id}
+                accessibilityRole="button"
+                onPress={() => router.push(`/sales/${sale.id}`)}
+                style={styles.saleItemCard}
+              >
+                <View style={styles.saleItemLeft}>
+                  <Text style={styles.saleItemTitle}>
+                    Venda #{sale.id.slice(0, 8).toUpperCase()}
+                  </Text>
+                  <Text style={styles.saleItemMeta}>
+                    {formatDateTimeBR(sale.created_at)} •{' '}
+                    {sale.item_count === 1
+                      ? '1 item'
+                      : `${sale.item_count} itens`}
+                  </Text>
+                </View>
+
+                <View style={styles.saleItemRight}>
+                  <MoneyText
+                    cents={sale.total_cents}
+                    size="sm"
+                    tone={sale.status === 'cancelled' ? 'error' : 'primary'}
+                  />
+                  <StatusBadge
+                    label={statusMeta.label}
+                    tone={statusMeta.tone}
+                  />
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
 
       <ConfirmDialog
         visible={confirmArchiveVisible}
@@ -352,5 +443,35 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing.md,
     marginBottom: spacing.xl,
+  },
+  salesList: {
+    gap: spacing.sm,
+  },
+  saleItemCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.sm,
+  },
+  saleItemLeft: {
+    flex: 1,
+    gap: 2,
+  },
+  saleItemTitle: {
+    ...typography.bodyStrong,
+    color: colors.text,
+  },
+  saleItemMeta: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  saleItemRight: {
+    alignItems: 'flex-end',
+    gap: 4,
   },
 });

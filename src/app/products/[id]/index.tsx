@@ -239,16 +239,28 @@ export default function ProductDetailScreen() {
 
         <View style={styles.actionsColumn}>
           {!product.is_archived ? (
-            <PrimaryButton
-              label="Movimentar estoque"
-              iconName="swap-vertical-outline"
-              onPress={() =>
-                router.push({
-                  pathname: '/inventory/adjust',
-                  params: { productId: product.id },
-                })
-              }
-            />
+            <>
+              <PrimaryButton
+                label="Vender este produto"
+                iconName="cart-outline"
+                onPress={() =>
+                  router.push({
+                    pathname: '/sales/new',
+                    params: { productId: product.id },
+                  })
+                }
+              />
+              <SecondaryButton
+                label="Movimentar estoque"
+                iconName="swap-vertical-outline"
+                onPress={() =>
+                  router.push({
+                    pathname: '/inventory/adjust',
+                    params: { productId: product.id },
+                  })
+                }
+              />
+            </>
           ) : null}
           <SecondaryButton
             label="Histórico de estoque"
