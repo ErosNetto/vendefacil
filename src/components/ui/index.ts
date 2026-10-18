@@ -4,6 +4,7 @@ export * from './ConfirmDialog';
 export * from './CustomerRow';
 export * from './FeedbackStates';
 export * from './FormField';
+export * from './ProductCard';
 export * from './Screen';
 export * from './SearchAndFilters';
 export * from './StatusBadge';

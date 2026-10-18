@@ -97,6 +97,9 @@ export default function RootLayout() {
             <Stack.Screen name="customers/[id]/index" />
             <Stack.Screen name="customers/[id]/edit" />
             <Stack.Screen name="products/index" />
+            <Stack.Screen name="products/new" />
+            <Stack.Screen name="products/[id]/index" />
+            <Stack.Screen name="products/[id]/edit" />
             <Stack.Screen name="settings" />
           </Stack>
         </NavigationGuard>

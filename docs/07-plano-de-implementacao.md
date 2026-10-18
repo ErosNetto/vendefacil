@@ -19,14 +19,14 @@
 - [x] Validação e estados (`src/features/customers/`, `src/app/customers/`).
 - [x] Teste de isolamento (`supabase/tests/phase2_customers_rls_test.sql`).
 
-> **Nota de validação da Fase 2:** Execute `supabase/migrations/20261018000002_phase2_customers.sql` no SQL Editor do Supabase e, opcionalmente, rode `supabase/tests/phase2_customers_rls_test.sql` para validar o isolamento RLS entre workspaces.
-
 ## Fase 3 — Produtos e fotos
-- [ ] CRUD produtos/categorias.
-- [ ] Câmera/galeria e prévia.
-- [ ] Otimização e upload privado.
-- [ ] URL assinada, substituição e remoção.
-- [ ] Testes RLS/Storage.
+- [x] CRUD produtos/categorias (`supabase/migrations/20261018000003_phase3_products_and_storage.sql`, `src/features/products/`).
+- [x] Câmera/galeria e prévia (`src/features/products/imageService.ts`, `src/features/products/ProductForm.tsx`).
+- [x] Otimização e upload privado (`expo-image-manipulator` WebP + bucket privado `product-images`).
+- [x] URL assinada, substituição e remoção (`getSignedProductImageUrl`, `uploadProductImageToPrivateBucket`, `removeProductPrimaryImage`).
+- [x] Testes RLS/Storage (`supabase/tests/phase3_products_storage_rls_test.sql` + `src/features/products/schemas.test.ts`).
+
+> **Nota de validação da Fase 3:** Execute `supabase/migrations/20261018000003_phase3_products_and_storage.sql` no SQL Editor do Supabase para criar as tabelas `categories`, `products`, `product_images`, o bucket privado `product-images` e as políticas RLS de banco e Storage.
 
 ## Fase 4 — Estoque
 - [ ] Lista/detalhe e alertas de mínimo.

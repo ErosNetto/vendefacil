@@ -53,6 +53,48 @@ export type CustomerRow = {
   updated_at: string;
 };
 
+export type CategoryRow = {
+  id: string;
+  workspace_id: string;
+  name: string;
+  is_archived: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ProductRow = {
+  id: string;
+  workspace_id: string;
+  category_id: string | null;
+  name: string;
+  brand: string | null;
+  sku: string | null;
+  barcode: string | null;
+  cost_cents: number;
+  price_cents: number;
+  min_stock_qty: number;
+  current_stock_qty: number;
+  description: string | null;
+  primary_image_path: string | null;
+  is_archived: boolean;
+  archived_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ProductImageRow = {
+  id: string;
+  workspace_id: string;
+  product_id: string;
+  storage_path: string;
+  mime_type: 'image/jpeg' | 'image/png' | 'image/webp';
+  file_size_bytes: number;
+  created_by: string | null;
+  created_at: string;
+};
+
 export type CreateWorkspaceRpcResult = {
   workspace_id: string;
   name: string;
@@ -183,6 +225,97 @@ export type Database = {
           },
         ];
       };
+      categories: {
+        Row: CategoryRow;
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          name: string;
+          is_archived?: boolean;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          is_archived?: boolean;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'categories_workspace_id_fkey';
+            columns: ['workspace_id'];
+            isOneToOne: false;
+            referencedRelation: 'workspaces';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      products: {
+        Row: ProductRow;
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          category_id?: string | null;
+          name: string;
+          brand?: string | null;
+          sku?: string | null;
+          barcode?: string | null;
+          cost_cents?: number;
+          price_cents: number;
+          min_stock_qty?: number;
+          current_stock_qty?: number;
+          description?: string | null;
+          primary_image_path?: string | null;
+          is_archived?: boolean;
+          archived_at?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          category_id?: string | null;
+          name?: string;
+          brand?: string | null;
+          sku?: string | null;
+          barcode?: string | null;
+          cost_cents?: number;
+          price_cents?: number;
+          min_stock_qty?: number;
+          current_stock_qty?: number;
+          description?: string | null;
+          primary_image_path?: string | null;
+          is_archived?: boolean;
+          archived_at?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'products_workspace_id_fkey';
+            columns: ['workspace_id'];
+            isOneToOne: false;
+            referencedRelation: 'workspaces';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      product_images: {
+        Row: ProductImageRow;
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          product_id: string;
+          storage_path: string;
+          mime_type: 'image/jpeg' | 'image/png' | 'image/webp';
+          file_size_bytes: number;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          storage_path?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -218,6 +351,13 @@ export type Database = {
         Args: {
           p_workspace_id: string;
           p_allowed_roles: WorkspaceRole[];
+        };
+        Returns: boolean;
+      };
+      can_access_product_image_object: {
+        Args: {
+          p_bucket_id: string;
+          p_object_name: string;
         };
         Returns: boolean;
       };

@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   Pressable,
   StyleSheet,
@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 
+import { useScreenScroll } from '@/components/ui/Screen';
 import { colors, radius, spacing, touchTarget, typography } from '@/constants/theme';
 
 export interface FormFieldProps extends TextInputProps {
@@ -26,13 +27,16 @@ export function FormField({
   leftIcon,
   isPassword = false,
   style,
+  onFocus,
   ...inputProps
 }: FormFieldProps) {
   const [passwordVisible, setPasswordVisible] = useState(false);
+  const wrapperRef = useRef<View | null>(null);
+  const { ensureVisibleOnFocus } = useScreenScroll();
   const hasError = Boolean(errorMessage);
 
   return (
-    <View style={styles.wrapper}>
+    <View ref={wrapperRef} collapsable={false} style={styles.wrapper}>
       <Text style={styles.label}>{label}</Text>
       <View style={[styles.inputContainer, hasError ? styles.inputError : null]}>
         {leftIcon ? (
@@ -48,6 +52,10 @@ export function FormField({
           accessibilityLabel={label}
           secureTextEntry={isPassword && !passwordVisible}
           style={[styles.input, style]}
+          onFocus={(event) => {
+            ensureVisibleOnFocus(wrapperRef.current);
+            onFocus?.(event);
+          }}
           {...inputProps}
         />
         {isPassword ? (
