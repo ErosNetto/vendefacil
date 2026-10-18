@@ -144,11 +144,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: spacing.xs,
     marginBottom: spacing.xs,
   },
   metricTitle: {
     ...typography.caption,
     color: colors.textSecondary,
+    flex: 1,
   },
   metricIconBadge: {
     width: 30,
@@ -157,6 +159,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   metricSubtitle: {
     ...typography.caption,

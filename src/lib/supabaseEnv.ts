@@ -11,11 +11,23 @@ const PLACEHOLDER_KEYS = new Set([
 ]);
 
 /**
+ * Normaliza a URL do Supabase removendo aspas acidentais, barras no final
+ * ou sufixos como `/rest/v1` caso o usuário tenha copiado a URL do endpoint REST.
+ */
+export function normalizeSupabaseUrl(rawUrl: string): string {
+  return rawUrl
+    .trim()
+    .replace(/^['"]+|['"]+$/g, '')
+    .replace(/\/+(rest|auth|storage)\/v1\/?$/i, '')
+    .replace(/\/+$/, '');
+}
+
+/**
  * Inspeciona um token JWT (caso a chave esteja em formato JWT) ou string de chave
  * para impedir que uma chave `service_role` seja usada acidentalmente no cliente mobile.
  */
 export function isForbiddenServiceRoleKey(key: string): boolean {
-  const trimmed = key.trim();
+  const trimmed = key.trim().replace(/^['"]+|['"]+$/g, '');
   if (!trimmed) {
     return false;
   }
@@ -49,17 +61,21 @@ export function isForbiddenServiceRoleKey(key: string): boolean {
 export interface SupabaseEnvCheck {
   isConfigured: boolean;
   hasForbiddenKey: boolean;
+  normalizedUrl: string;
+  normalizedAnonKey: string;
   reason: string | null;
 }
 
 export function validateSupabaseEnv(url: string, anonKey: string): SupabaseEnvCheck {
-  const cleanUrl = url.trim();
-  const cleanKey = anonKey.trim();
+  const cleanUrl = normalizeSupabaseUrl(url);
+  const cleanKey = anonKey.trim().replace(/^['"]+|['"]+$/g, '');
 
   if (isForbiddenServiceRoleKey(cleanKey)) {
     return {
       isConfigured: false,
       hasForbiddenKey: true,
+      normalizedUrl: cleanUrl,
+      normalizedAnonKey: cleanKey,
       reason:
         'ERRO CRÍTICO DE SEGURANÇA: Uma chave service_role foi detectada em EXPO_PUBLIC_SUPABASE_ANON_KEY. Substitua imediatamente pela chave pública anon/publishable.',
     };
@@ -72,6 +88,8 @@ export function validateSupabaseEnv(url: string, anonKey: string): SupabaseEnvCh
     return {
       isConfigured: false,
       hasForbiddenKey: false,
+      normalizedUrl: cleanUrl,
+      normalizedAnonKey: cleanKey,
       reason:
         'A variável EXPO_PUBLIC_SUPABASE_URL ainda não foi configurada com a URL real do seu projeto Supabase.',
     };
@@ -81,6 +99,8 @@ export function validateSupabaseEnv(url: string, anonKey: string): SupabaseEnvCh
     return {
       isConfigured: false,
       hasForbiddenKey: false,
+      normalizedUrl: cleanUrl,
+      normalizedAnonKey: cleanKey,
       reason:
         'A variável EXPO_PUBLIC_SUPABASE_ANON_KEY ainda não foi configurada com a chave pública (anon/publishable) do seu projeto Supabase.',
     };
@@ -89,6 +109,8 @@ export function validateSupabaseEnv(url: string, anonKey: string): SupabaseEnvCh
   return {
     isConfigured: true,
     hasForbiddenKey: false,
+    normalizedUrl: cleanUrl,
+    normalizedAnonKey: cleanKey,
     reason: null,
   };
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   isForbiddenServiceRoleKey,
+  normalizeSupabaseUrl,
   validateSupabaseEnv,
 } from '@/lib/supabaseEnv';
 
@@ -23,15 +24,23 @@ describe('isForbiddenServiceRoleKey & validateSupabaseEnv', () => {
     expect(check.hasForbiddenKey).toBe(true);
   });
 
-  it('aceita URL válida e chave pública anon/publishable válida', () => {
+  it('aceita URL válida e normaliza sufixos como /rest/v1/ automaticamente', () => {
     const fakeHeader = globalThis.btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
     const fakeAnonPayload = globalThis.btoa(
       JSON.stringify({ role: 'anon', iss: 'supabase' }),
     );
     const fakeAnonJwt = `${fakeHeader}.${fakeAnonPayload}.assinatura`;
 
-    const check = validateSupabaseEnv('https://abcxyz.supabase.co', fakeAnonJwt);
+    expect(normalizeSupabaseUrl('https://abcxyz.supabase.co/rest/v1/')).toBe(
+      'https://abcxyz.supabase.co',
+    );
+
+    const check = validateSupabaseEnv(
+      'https://abcxyz.supabase.co/rest/v1/',
+      fakeAnonJwt,
+    );
     expect(check.isConfigured).toBe(true);
+    expect(check.normalizedUrl).toBe('https://abcxyz.supabase.co');
     expect(check.hasForbiddenKey).toBe(false);
     expect(check.reason).toBeNull();
   });

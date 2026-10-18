@@ -1,4 +1,9 @@
-import { Stack, useRouter, useSegments } from 'expo-router';
+import {
+  Stack,
+  useRootNavigationState,
+  useRouter,
+  useSegments,
+} from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -17,9 +22,11 @@ function NavigationGuard({ children }: { children: React.ReactNode }) {
   } = useSession();
   const segments = useSegments();
   const router = useRouter();
+  const rootNavigationState = useRootNavigationState();
+  const isNavigationReady = Boolean(rootNavigationState?.key);
 
   useEffect(() => {
-    if (isLoadingSession || isLoadingWorkspaces) {
+    if (!isNavigationReady || isLoadingSession || isLoadingWorkspaces) {
       return;
     }
 
@@ -48,20 +55,25 @@ function NavigationGuard({ children }: { children: React.ReactNode }) {
     activeWorkspace,
     isLoadingSession,
     isLoadingWorkspaces,
+    isNavigationReady,
     router,
     segments,
     session,
   ]);
 
-  if (isLoadingSession || (session && isLoadingWorkspaces)) {
-    return (
-      <View style={styles.splashContainer}>
-        <LoadingState message="Verificando sua sessão segura..." />
-      </View>
-    );
-  }
+  const showLoadingOverlay =
+    !isNavigationReady || isLoadingSession || (Boolean(session) && isLoadingWorkspaces);
 
-  return <>{children}</>;
+  return (
+    <View style={styles.rootContainer}>
+      {children}
+      {showLoadingOverlay ? (
+        <View style={styles.splashOverlay}>
+          <LoadingState message="Verificando sua sessão segura..." />
+        </View>
+      ) : null}
+    </View>
+  );
 }
 
 export default function RootLayout() {
@@ -115,8 +127,17 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
-  splashContainer: {
+  rootContainer: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  splashOverlay: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: colors.background,
+    zIndex: 10,
   },
 });

@@ -3,7 +3,7 @@
 Aplicativo mobile em **React Native + Expo + TypeScript + Expo Router** com backend gerenciado no **Supabase** (Auth, PostgreSQL, RLS e Storage privado), projetado para vendedores autônomos e pequenos negócios no Brasil.
 
 ## Decisões Arquiteturais Fixas
-- **Stack Mobile:** React Native + Expo SDK 58 + TypeScript estrito + Expo Router.
+- **Stack Mobile:** React Native + Expo SDK 57 + TypeScript estrito + Expo Router.
 - **Backend Gerenciado:** Supabase Auth, PostgreSQL, Row Level Security (RLS) e Supabase Storage.
 - **Sem servidor Node.js próprio e sem MongoDB.**
 - **Isolamento Multiusuário:** Todo registro comercial pertence a um `workspace` isolado por políticas RLS no PostgreSQL.

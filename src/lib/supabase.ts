@@ -5,8 +5,8 @@ import { AppState, Platform } from 'react-native';
 import { validateSupabaseEnv } from '@/lib/supabaseEnv';
 import type { Database } from '@/types/database';
 
-const rawUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL ?? '').trim();
-const rawAnonKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').trim();
+const rawUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+const rawAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 
 /**
  * Adaptador de armazenamento seguro em blocos (chunked) para Expo SecureStore.
@@ -92,10 +92,10 @@ const expoSecureStorageAdapter = {
 export const supabaseEnvStatus = validateSupabaseEnv(rawUrl, rawAnonKey);
 
 const effectiveUrl = supabaseEnvStatus.isConfigured
-  ? rawUrl
+  ? supabaseEnvStatus.normalizedUrl
   : 'https://placeholder-unconfigured.supabase.co';
 const effectiveAnonKey = supabaseEnvStatus.isConfigured
-  ? rawAnonKey
+  ? supabaseEnvStatus.normalizedAnonKey
   : 'placeholder-anon-key-not-configured';
 
 export const supabase: SupabaseClient<Database> = createClient<Database>(
@@ -120,10 +120,9 @@ export function registerSupabaseAutoRefresh(): void {
   appStateListenerRegistered = true;
 
   AppState.addEventListener('change', (state) => {
-    if (state === 'active') {
+    if (state === 'active')
       void supabase.auth.startAutoRefresh();
-    } else {
+    else
       void supabase.auth.stopAutoRefresh();
-    }
   });
 }
