@@ -92,33 +92,12 @@ export default function RootLayout() {
             <Stack.Screen name="(auth)" />
             <Stack.Screen name="(onboarding)" />
             <Stack.Screen name="(tabs)" />
-            <Stack.Screen
-              name="customers/index"
-              options={{
-                headerShown: true,
-                title: 'Clientes',
-                headerStyle: { backgroundColor: colors.surface },
-                headerTintColor: colors.text,
-              }}
-            />
-            <Stack.Screen
-              name="products/index"
-              options={{
-                headerShown: true,
-                title: 'Catálogo de Produtos',
-                headerStyle: { backgroundColor: colors.surface },
-                headerTintColor: colors.text,
-              }}
-            />
-            <Stack.Screen
-              name="settings"
-              options={{
-                headerShown: true,
-                title: 'Configurações e Conta',
-                headerStyle: { backgroundColor: colors.surface },
-                headerTintColor: colors.text,
-              }}
-            />
+            <Stack.Screen name="customers/index" />
+            <Stack.Screen name="customers/new" />
+            <Stack.Screen name="customers/[id]/index" />
+            <Stack.Screen name="customers/[id]/edit" />
+            <Stack.Screen name="products/index" />
+            <Stack.Screen name="settings" />
           </Stack>
         </NavigationGuard>
       </SessionProvider>

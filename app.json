@@ -29,9 +29,6 @@
       "expo-secure-store",
       "expo-status-bar",
       "expo-splash-screen"
-    ],
-    "experiments": {
-      "typedRoutes": true
-    }
+    ]
   }
 }

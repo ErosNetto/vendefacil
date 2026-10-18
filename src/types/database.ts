@@ -38,6 +38,21 @@ export type AuditLogRow = {
   created_at: string;
 };
 
+export type CustomerRow = {
+  id: string;
+  workspace_id: string;
+  full_name: string;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  notes: string | null;
+  is_archived: boolean;
+  archived_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type CreateWorkspaceRpcResult = {
   workspace_id: string;
   name: string;
@@ -131,6 +146,42 @@ export type Database = {
           action?: string;
         };
         Relationships: [];
+      };
+      customers: {
+        Row: CustomerRow;
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          full_name: string;
+          phone?: string | null;
+          email?: string | null;
+          address?: string | null;
+          notes?: string | null;
+          is_archived?: boolean;
+          archived_at?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          full_name?: string;
+          phone?: string | null;
+          email?: string | null;
+          address?: string | null;
+          notes?: string | null;
+          is_archived?: boolean;
+          archived_at?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'customers_workspace_id_fkey';
+            columns: ['workspace_id'];
+            isOneToOne: false;
+            referencedRelation: 'workspaces';
+            referencedColumns: ['id'];
+          },
+        ];
       };
     };
     Views: {

@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Screen, SecondaryButton, StatusBadge } from '@/components/ui';
+import { AppHeader, Screen, SecondaryButton, StatusBadge } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
 import { getRoleLabelPtBR } from '@/features/workspace/schemas';
@@ -48,6 +48,11 @@ export default function SettingsScreen() {
 
   return (
     <Screen>
+      <AppHeader
+        title="Configurações e Conta"
+        subtitle={activeWorkspace?.workspace.name ?? 'Preferências'}
+        showBack
+      />
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Perfil do vendedor</Text>
         <View style={styles.infoRow}>

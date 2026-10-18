@@ -14,12 +14,12 @@
 - [x] Criar workspace com RPC segura (`supabase/migrations/20261017000001_phase1_foundation.sql`).
 - [x] Tela de onboarding/sem workspace.
 
-> **Nota de validação da Fase 1:** Código mobile, tipos estritos, validações Zod, testes unitários e migração SQL transacional com RLS e testes SQL (`supabase/tests/phase1_rls_isolation_test.sql`) estão implementados e verificados localmente. Falta apenas a ação manual do usuário para configurar o `.env` com seu projeto Supabase e executar a migração SQL no painel do Supabase.
-
 ## Fase 2 — Clientes
-- [ ] CRUD, busca, filtro, arquivamento.
-- [ ] Validação e estados.
-- [ ] Teste de isolamento.
+- [x] CRUD, busca, filtro, arquivamento (`supabase/migrations/20261018000002_phase2_customers.sql`).
+- [x] Validação e estados (`src/features/customers/`, `src/app/customers/`).
+- [x] Teste de isolamento (`supabase/tests/phase2_customers_rls_test.sql`).
+
+> **Nota de validação da Fase 2:** Execute `supabase/migrations/20261018000002_phase2_customers.sql` no SQL Editor do Supabase e, opcionalmente, rode `supabase/tests/phase2_customers_rls_test.sql` para validar o isolamento RLS entre workspaces.
 
 ## Fase 3 — Produtos e fotos
 - [ ] CRUD produtos/categorias.
