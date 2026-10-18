@@ -66,6 +66,23 @@ export function formatDateBR(value: string | Date): string {
 }
 
 /**
+ * Formata um timestamp ISO no padrão brasileiro `dd/MM/yyyy às HH:mm`.
+ */
+export function formatDateTimeBR(value: string | Date): string {
+  const dateObj = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(dateObj.getTime())) {
+    return '--/--/----';
+  }
+
+  const day = String(dateObj.getDate()).padStart(2, '0');
+  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const year = String(dateObj.getFullYear());
+  const hours = String(dateObj.getHours()).padStart(2, '0');
+  const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+  return `${day}/${month}/${year} às ${hours}:${minutes}`;
+}
+
+/**
  * Distribui um total em centavos inteiros em N parcelas sem perder nem criar centavos.
  * Os centavos residuais da divisão são alocados nas primeiras parcelas.
  */

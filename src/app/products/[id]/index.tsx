@@ -17,6 +17,7 @@ import {
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
+import { getProductStockHealth } from '@/features/inventory/schemas';
 import { getSignedProductImageUrl } from '@/features/products/imageService';
 import { calculateProfitMarginPercent } from '@/features/products/schemas';
 import {
@@ -135,8 +136,7 @@ export default function ProductDetailScreen() {
   );
   const currentStock = Number(product.current_stock_qty ?? 0);
   const minStock = Number(product.min_stock_qty ?? 0);
-  const isLowStock =
-    !product.is_archived && currentStock <= minStock && minStock > 0;
+  const stockHealth = getProductStockHealth(product);
 
   return (
     <Screen>
@@ -170,10 +170,14 @@ export default function ProductDetailScreen() {
         </View>
 
         <View style={styles.badgeRow}>
-          {product.is_archived ? (
+          {stockHealth === 'archived' ? (
             <StatusBadge label="Produto arquivado" tone="warning" />
-          ) : isLowStock ? (
+          ) : stockHealth === 'out' ? (
+            <StatusBadge label="Sem estoque" tone="error" />
+          ) : stockHealth === 'low' ? (
             <StatusBadge label="Estoque abaixo do mínimo" tone="error" />
+          ) : stockHealth === 'at_minimum' ? (
+            <StatusBadge label="Estoque no limite mínimo" tone="warning" />
           ) : (
             <StatusBadge label="Produto ativo" tone="success" />
           )}
@@ -234,7 +238,32 @@ export default function ProductDetailScreen() {
         ) : null}
 
         <View style={styles.actionsColumn}>
-          <PrimaryButton
+          {!product.is_archived ? (
+            <PrimaryButton
+              label="Movimentar estoque"
+              iconName="swap-vertical-outline"
+              onPress={() =>
+                router.push({
+                  pathname: '/inventory/adjust',
+                  params: { productId: product.id },
+                })
+              }
+            />
+          ) : null}
+          <SecondaryButton
+            label="Histórico de estoque"
+            iconName="time-outline"
+            onPress={() =>
+              router.push({
+                pathname: '/inventory/movements',
+                params: {
+                  productId: product.id,
+                  productName: product.name,
+                },
+              })
+            }
+          />
+          <SecondaryButton
             label="Editar produto"
             iconName="create-outline"
             onPress={() => router.push(`/products/${product.id}/edit`)}

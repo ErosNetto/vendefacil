@@ -29,10 +29,12 @@
 > **Nota de validação da Fase 3:** Execute `supabase/migrations/20261018000003_phase3_products_and_storage.sql` no SQL Editor do Supabase para criar as tabelas `categories`, `products`, `product_images`, o bucket privado `product-images` e as políticas RLS de banco e Storage.
 
 ## Fase 4 — Estoque
-- [ ] Lista/detalhe e alertas de mínimo.
-- [ ] Entradas, ajustes, danos e devoluções.
-- [ ] Histórico append-only.
-- [ ] RPC transacional e testes contra duplicação/saldo negativo.
+- [x] Lista/detalhe e alertas de mínimo (`src/app/(tabs)/inventory.tsx`, `src/features/inventory/schemas.ts`).
+- [x] Entradas, ajustes, danos e devoluções (`src/app/inventory/adjust.tsx`, `src/features/inventory/services.ts`).
+- [x] Histórico append-only (`src/app/inventory/movements.tsx`, `public.stock_movements`).
+- [x] RPC transacional e testes contra duplicação/saldo negativo (`supabase/migrations/20261018000004_phase4_inventory.sql`, `supabase/tests/phase4_inventory_rls_and_rpc_test.sql`, `src/features/inventory/schemas.test.ts`).
+
+> **Nota de validação da Fase 4:** Execute `supabase/migrations/20261018000004_phase4_inventory.sql` no SQL Editor do Supabase para criar a tabela append-only `stock_movements` e a função atômica e idempotente `adjust_stock`.
 
 ## Fase 5 — Vendas
 - [ ] Carrinho multi-itens.

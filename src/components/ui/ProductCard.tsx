@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { MoneyText, StatusBadge } from '@/components/ui/StatusBadge';
 import { colors, radius, spacing, typography } from '@/constants/theme';
+import { getProductStockHealth } from '@/features/inventory/schemas';
 import { getSignedProductImageUrl } from '@/features/products/imageService';
 import type { ProductRow } from '@/types/database';
 
@@ -46,8 +47,7 @@ export function ProductCard({
   }, [product.primary_image_path]);
 
   const currentStock = Number(product.current_stock_qty ?? 0);
-  const minStock = Number(product.min_stock_qty ?? 0);
-  const isLowStock = !product.is_archived && currentStock <= minStock && minStock > 0;
+  const stockHealth = getProductStockHealth(product);
 
   const subtitleParts = [product.brand, categoryName].filter(Boolean);
   const subtitle =
@@ -100,10 +100,14 @@ export function ProductCard({
       </View>
 
       <View style={styles.rightColumn}>
-        {product.is_archived ? (
+        {stockHealth === 'archived' ? (
           <StatusBadge label="Arquivado" tone="warning" />
-        ) : isLowStock ? (
+        ) : stockHealth === 'out' ? (
+          <StatusBadge label="Sem estoque" tone="error" />
+        ) : stockHealth === 'low' ? (
           <StatusBadge label="Estoque baixo" tone="error" />
+        ) : stockHealth === 'at_minimum' ? (
+          <StatusBadge label="No limite" tone="warning" />
         ) : (
           <StatusBadge label="Ativo" tone="success" />
         )}

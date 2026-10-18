@@ -95,6 +95,44 @@ export type ProductImageRow = {
   created_at: string;
 };
 
+export type StockMovementType =
+  | 'entry'
+  | 'sale_out'
+  | 'adjustment_in'
+  | 'adjustment_out'
+  | 'damage'
+  | 'return_in'
+  | 'reversal';
+
+export type StockMovementRow = {
+  id: string;
+  workspace_id: string;
+  product_id: string;
+  movement_type: StockMovementType;
+  quantity_delta: number;
+  previous_stock_qty: number;
+  resulting_stock_qty: number;
+  reason: string | null;
+  idempotency_key: string;
+  reference_type: string | null;
+  reference_id: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type AdjustStockRpcResult = {
+  movement_id: string;
+  workspace_id: string;
+  product_id: string;
+  movement_type: StockMovementType;
+  quantity_delta: number;
+  previous_stock_qty: number;
+  resulting_stock_qty: number;
+  reason: string | null;
+  created_at: string;
+  idempotent_replay: boolean;
+};
+
 export type CreateWorkspaceRpcResult = {
   workspace_id: string;
   name: string;
@@ -316,6 +354,36 @@ export type Database = {
         };
         Relationships: [];
       };
+      stock_movements: {
+        Row: StockMovementRow;
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          product_id: string;
+          movement_type: StockMovementType;
+          quantity_delta: number;
+          previous_stock_qty: number;
+          resulting_stock_qty: number;
+          reason?: string | null;
+          idempotency_key: string;
+          reference_type?: string | null;
+          reference_id?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          reason?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'stock_movements_product_workspace_fkey';
+            columns: ['product_id', 'workspace_id'];
+            isOneToOne: false;
+            referencedRelation: 'products';
+            referencedColumns: ['id', 'workspace_id'];
+          },
+        ];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -361,9 +429,21 @@ export type Database = {
         };
         Returns: boolean;
       };
+      adjust_stock: {
+        Args: {
+          p_workspace_id: string;
+          p_product_id: string;
+          p_movement_type: StockMovementType;
+          p_quantity: number;
+          p_reason?: string | null;
+          p_idempotency_key?: string;
+        };
+        Returns: AdjustStockRpcResult;
+      };
     };
     Enums: {
       workspace_role: WorkspaceRole;
+      stock_movement_type: StockMovementType;
     };
     CompositeTypes: {
       [_ in never]: never;
