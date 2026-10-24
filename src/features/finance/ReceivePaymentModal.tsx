@@ -140,8 +140,16 @@ export function ReceivePaymentModal({
 
   const maxPrincipalCents = suggestedCharges.principalCents;
 
+  const prevVisibleRef = useRef(false);
+  const prevKeyRef = useRef('');
+
   useEffect(() => {
-    if (visible && openInstallments.length > 0) {
+    const currentKey = openInstallments.map((item) => item.id).join(',');
+    const wasClosed = !prevVisibleRef.current && visible;
+    const keyChanged = prevKeyRef.current !== currentKey;
+
+    if (visible && openInstallments.length > 0 && (wasClosed || keyChanged)) {
+      prevKeyRef.current = currentKey;
       const initialIds = openInstallments.map((item) => item.id);
       const initialSummary = computeInstallmentsSummary(
         openInstallments,
@@ -156,6 +164,7 @@ export function ReceivePaymentModal({
       setErrorMessage(null);
       idempotencyKeyRef.current = createPaymentIdempotencyKey();
     }
+    prevVisibleRef.current = visible;
   }, [financeSettings, openInstallments, visible]);
 
   useEffect(() => {

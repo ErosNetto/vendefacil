@@ -58,10 +58,10 @@
 > **Nota de validação da Fase 6 e Complementos:** Execute `supabase/migrations/20261018000006_phase6_finance.sql` e `supabase/migrations/20261024000007_link_sale_customer.sql` no SQL Editor do Supabase. Validações automatizadas disponíveis em `supabase/tests/phase6_finance_rls_and_rpc_test.sql` e `supabase/tests/link_sale_customer_test.sql`.
 
 ## Fase 7 — Dashboard/calendário
-- [ ] Métricas reais por período.
-- [ ] Vencimentos e agenda.
-- [ ] Alertas de estoque.
-- [ ] Testes de datas/timezone.
+- [x] Métricas reais por período (hoje, 7 dias, mês atual e geral em `src/features/dashboard/schemas.ts` e `src/app/(tabs)/index.tsx`).
+- [x] Vencimentos e agenda (calendário com filtros de hoje, amanhã, 7 dias, atrasadas e mês, ação de cobrança por WhatsApp e recebimento em 1 clique em `src/app/(tabs)/calendar.tsx`).
+- [x] Alertas de estoque e rascunhos operacionais no Dashboard (`src/app/(tabs)/index.tsx`).
+- [x] Testes de datas/timezone e agregação de métricas (`src/features/dashboard/schemas.test.ts`).
 
 ## Fase 8 — Despesas/relatórios
 - [ ] Despesas e relatórios.

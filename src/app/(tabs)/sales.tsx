@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect, useRouter } from 'expo-router';
-import { memo, useCallback, useMemo, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Platform, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
 import {
@@ -114,12 +114,23 @@ const SaleCardItem = memo(function SaleCardItem({
 
 export default function SalesTabScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ status?: string }>();
   const { activeWorkspace } = useSession();
   const workspaceId = activeWorkspace?.workspace.id ?? null;
 
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebounce(searchQuery, 300);
-  const [statusFilter, setStatusFilter] = useState<SaleFilterKey>('all');
+  const [statusFilter, setStatusFilter] = useState<SaleFilterKey>(
+    params.status && ['all', 'confirmed', 'draft', 'cancelled'].includes(params.status)
+      ? (params.status as SaleFilterKey)
+      : 'all',
+  );
+
+  useEffect(() => {
+    if (params.status && ['all', 'confirmed', 'draft', 'cancelled'].includes(params.status)) {
+      setStatusFilter(params.status as SaleFilterKey);
+    }
+  }, [params.status]);
 
   const [summary, setSummary] = useState<{
     totalCount: number;
