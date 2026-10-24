@@ -480,6 +480,28 @@ export default function FinanceTabScreen() {
           />
         ) : null}
 
+        <View style={styles.quickNavRow}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push('/expenses')}
+            style={styles.quickNavButton}
+          >
+            <Ionicons name="receipt-outline" size={18} color={colors.primary} />
+            <Text style={styles.quickNavButtonText}>Despesas</Text>
+            <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
+          </Pressable>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push('/reports')}
+            style={styles.quickNavButton}
+          >
+            <Ionicons name="bar-chart-outline" size={18} color={colors.primary} />
+            <Text style={styles.quickNavButtonText}>DRE & Lucro</Text>
+            <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
+          </Pressable>
+        </View>
+
         <View style={styles.metricsGrid}>
           <MetricCard
             title="Total em aberto"
@@ -547,6 +569,7 @@ export default function FinanceTabScreen() {
       filteredInstallments.length,
       displayedInstallments.length,
       isFiltered,
+      router,
     ],
   );
 
@@ -738,6 +761,30 @@ export default function FinanceTabScreen() {
 const styles = StyleSheet.create({
   errorContainer: {
     marginBottom: spacing.md,
+  },
+  quickNavRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  quickNavButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  quickNavButtonText: {
+    ...typography.caption,
+    color: colors.text,
+    fontWeight: '700',
+    flex: 1,
+    marginLeft: 6,
   },
   metricsGrid: {
     flexDirection: 'row',

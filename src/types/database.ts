@@ -248,6 +248,32 @@ export type PaymentAllocationRow = {
   created_at: string;
 };
 
+export type ExpenseCategoryRow = {
+  id: string;
+  workspace_id: string;
+  name: string;
+  icon: string | null;
+  color: string | null;
+  created_at: string;
+};
+
+export type ExpenseRow = {
+  id: string;
+  workspace_id: string;
+  category_id: string | null;
+  description: string;
+  amount_cents: number;
+  expense_date: string;
+  payment_method: PaymentMethod;
+  notes: string | null;
+  is_cancelled: boolean;
+  cancelled_at: string | null;
+  cancellation_reason: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type LinkSaleCustomerRpcResult = {
   success: boolean;
   sale_id: string;
@@ -705,11 +731,66 @@ export type Database = {
         };
         Relationships: [];
       };
+      expense_categories: {
+        Row: ExpenseCategoryRow;
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          name: string;
+          icon?: string | null;
+          color?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          name?: string;
+          icon?: string | null;
+          color?: string | null;
+        };
+        Relationships: [];
+      };
+      expenses: {
+        Row: ExpenseRow;
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          category_id?: string | null;
+          description: string;
+          amount_cents: number;
+          expense_date?: string;
+          payment_method?: PaymentMethod;
+          notes?: string | null;
+          is_cancelled?: boolean;
+          cancelled_at?: string | null;
+          cancellation_reason?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          category_id?: string | null;
+          description?: string;
+          amount_cents?: number;
+          expense_date?: string;
+          payment_method?: PaymentMethod;
+          notes?: string | null;
+          is_cancelled?: boolean;
+          cancelled_at?: string | null;
+          cancellation_reason?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
     };
     Functions: {
+      seed_default_expense_categories: {
+        Args: {
+          target_workspace_id: string;
+        };
+        Returns: void;
+      };
       create_workspace: {
         Args: {
           p_name: string;

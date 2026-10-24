@@ -6,6 +6,7 @@ export * from './DatePickerField';
 export * from './FeedbackStates';
 export * from './FormField';
 export * from './PaginationUI';
+export * from './PeriodSegmentedControl';
 export * from './ProductCard';
 export * from './Screen';
 export * from './SearchAndFilters';

@@ -64,9 +64,9 @@
 - [x] Testes de datas/timezone e agregação de métricas (`src/features/dashboard/schemas.test.ts`).
 
 ## Fase 8 — Despesas/relatórios
-- [ ] Despesas e relatórios.
-- [ ] Exportação CSV.
-- [ ] Validar receita vs recebimento vs lucro.
+- [x] Despesas e relatórios (tabelas `expenses` e `expense_categories`, seed RPC, telas `/expenses`, `/expenses/new` e `/reports`).
+- [x] Exportação CSV (DRE, Fluxo de Caixa, Despesas por Categoria e extratos detalhados com UTF-8 BOM para Excel via `Share`).
+- [x] Validar receita vs recebimento vs lucro (fórmula contábil de competência vs regime de caixa, testes unitários de cálculo).
 
 ## Fase 9 — APK
 - [ ] Testes RLS e fluxos ponta a ponta.

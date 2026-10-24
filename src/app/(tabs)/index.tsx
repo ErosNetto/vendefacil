@@ -16,6 +16,7 @@ import {
   LoadingState,
   MetricCard,
   MoneyText,
+  PeriodSegmentedControl,
   Screen,
   StatusBadge,
 } from '@/components/ui';
@@ -205,31 +206,12 @@ export default function DashboardScreen() {
           }
         >
           {/* Seletor de Período 100% de Largura com 4 itens de mesmo tamanho */}
-          <View style={styles.periodSegmentedBar}>
-            {DASHBOARD_PERIOD_OPTIONS.map((opt) => {
-              const isSelected = period === opt.key;
-              return (
-                <Pressable
-                  key={opt.key}
-                  accessibilityRole="button"
-                  onPress={() => setPeriod(opt.key)}
-                  style={[
-                    styles.periodSegmentedTab,
-                    isSelected ? styles.periodSegmentedTabSelected : null,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.periodSegmentedText,
-                      isSelected ? styles.periodSegmentedTextSelected : null,
-                    ]}
-                  >
-                    {opt.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          <PeriodSegmentedControl
+            options={DASHBOARD_PERIOD_OPTIONS}
+            selectedKey={period}
+            onSelect={setPeriod}
+            style={styles.periodControlWrap}
+          />
 
           {/* Alertas Operacionais (Estoque e Rascunhos) */}
           {metrics && (metrics.outOfStockCount > 0 || metrics.lowStockCount > 0) ? (
@@ -373,6 +355,30 @@ export default function DashboardScreen() {
               </View>
               <Text style={styles.quickActionTitle}>Ajustar estoque</Text>
               <Text style={styles.quickActionSubtitle}>Entrada ou saída</Text>
+            </Pressable>
+
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push('/expenses')}
+              style={styles.quickActionCard}
+            >
+              <View style={styles.quickActionIconBox}>
+                <Ionicons name="receipt-outline" size={22} color={colors.primary} />
+              </View>
+              <Text style={styles.quickActionTitle}>Despesas</Text>
+              <Text style={styles.quickActionSubtitle}>Contas da loja</Text>
+            </Pressable>
+
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push('/reports')}
+              style={styles.quickActionCard}
+            >
+              <View style={styles.quickActionIconBox}>
+                <Ionicons name="bar-chart-outline" size={22} color={colors.primary} />
+              </View>
+              <Text style={styles.quickActionTitle}>DRE e Lucro</Text>
+              <Text style={styles.quickActionSubtitle}>Demonstrativo</Text>
             </Pressable>
           </View>
 
@@ -551,39 +557,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  periodSegmentedBar: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface,
-    borderRadius: radius.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 4,
+  periodControlWrap: {
     marginBottom: spacing.md,
-    width: '100%',
-    gap: 4,
-  },
-  periodSegmentedTab: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radius.control,
-    backgroundColor: 'transparent',
-  },
-  periodSegmentedTabSelected: {
-    backgroundColor: colors.primarySoft,
-  },
-  periodSegmentedText: {
-    ...typography.caption,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    textAlign: 'center',
-  },
-  periodSegmentedTextSelected: {
-    ...typography.bodyStrong,
-    fontSize: 13,
-    color: colors.primaryDark,
-    fontWeight: '700',
   },
   alertBanner: {
     flexDirection: 'row',
