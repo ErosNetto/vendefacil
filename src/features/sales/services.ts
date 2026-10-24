@@ -114,6 +114,11 @@ export interface CreateOrConfirmSaleInput {
   notes?: string | null;
   confirmImmediately: boolean;
   idempotencyKey: string;
+  paymentMode?: 'cash' | 'installments';
+  paymentMethod?: 'pix' | 'cash' | 'credit_card' | 'debit_card' | 'bank_transfer' | 'other';
+  downPaymentCents?: number;
+  installmentCount?: number;
+  firstDueDateISO?: string | null;
 }
 
 export async function createOrConfirmWorkspaceSale(
@@ -129,6 +134,11 @@ export async function createOrConfirmWorkspaceSale(
     p_notes: input.notes ?? null,
     p_confirm_immediately: input.confirmImmediately,
     p_idempotency_key: input.idempotencyKey,
+    p_payment_mode: input.paymentMode ?? 'cash',
+    p_payment_method: input.paymentMethod ?? 'pix',
+    p_down_payment_cents: input.downPaymentCents ?? 0,
+    p_installment_count: input.installmentCount ?? 1,
+    p_first_due_date: input.firstDueDateISO ?? null,
   });
 
   if (error) {
@@ -150,6 +160,11 @@ export interface UpdateDraftSaleInput {
   discountCents: number;
   notes?: string | null;
   confirmImmediately: boolean;
+  paymentMode?: 'cash' | 'installments';
+  paymentMethod?: 'pix' | 'cash' | 'credit_card' | 'debit_card' | 'bank_transfer' | 'other';
+  downPaymentCents?: number;
+  installmentCount?: number;
+  firstDueDateISO?: string | null;
 }
 
 export async function updateWorkspaceDraftSale(
@@ -165,6 +180,11 @@ export async function updateWorkspaceDraftSale(
     p_discount_cents: input.discountCents,
     p_notes: input.notes ?? null,
     p_confirm_immediately: input.confirmImmediately,
+    p_payment_mode: input.paymentMode ?? 'cash',
+    p_payment_method: input.paymentMethod ?? 'pix',
+    p_down_payment_cents: input.downPaymentCents ?? 0,
+    p_installment_count: input.installmentCount ?? 1,
+    p_first_due_date: input.firstDueDateISO ?? null,
   });
 
   if (error) {
@@ -222,6 +242,29 @@ export async function cancelWorkspaceSale(
   }
 
   return data as CancelSaleRpcResult;
+}
+
+export async function linkSaleCustomer(
+  workspaceId: string,
+  saleId: string,
+  customerId: string | null,
+): Promise<{ customerId: string | null; customerName: string | null }> {
+  ensureConfigured();
+
+  const { data, error } = await supabase.rpc('link_sale_customer', {
+    p_workspace_id: workspaceId,
+    p_sale_id: saleId,
+    p_customer_id: customerId,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return {
+    customerId: data.customer_id,
+    customerName: data.customer_name_snapshot,
+  };
 }
 
 export function mapSaleServiceError(error: unknown): string {

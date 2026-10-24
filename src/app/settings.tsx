@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { AppHeader, Screen, SecondaryButton, StatusBadge } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
+import { FinanceSettingsCard } from '@/features/finance/FinanceSettingsCard';
 import { getRoleLabelPtBR } from '@/features/workspace/schemas';
 import { formatDateBR } from '@/utils/formatters';
 
@@ -101,6 +102,13 @@ export default function SettingsScreen() {
           <Text style={styles.emptyText}>Nenhum espaço selecionado.</Text>
         )}
       </View>
+
+      {activeWorkspace ? (
+        <FinanceSettingsCard
+          workspace={activeWorkspace.workspace}
+          onUpdated={refreshWorkspaceContext}
+        />
+      ) : null}
 
       {workspaces.length > 1 ? (
         <View style={styles.card}>

@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
   AppHeader,
+  DatePickerField,
   EmptyState,
   ErrorState,
   FormField,
@@ -20,6 +21,13 @@ import { colors, radius, spacing, typography } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
 import { getCustomerInitials } from '@/features/customers/schemas';
 import { listWorkspaceCustomers } from '@/features/customers/services';
+import {
+  addDaysToISODate,
+  buildInstallmentPreview,
+  getTodayISODate,
+  parseBRDateInputToISO,
+  PAYMENT_METHOD_OPTIONS,
+} from '@/features/finance/schemas';
 import { listWorkspaceProducts } from '@/features/products/services';
 import {
   addOrIncrementCartItem,
@@ -36,8 +44,20 @@ import {
   mapSaleServiceError,
   updateWorkspaceDraftSale,
 } from '@/features/sales/services';
-import type { CustomerRow, ProductRow } from '@/types/database';
-import { formatCentsToBRL } from '@/utils/formatters';
+import type {
+  CustomerRow,
+  PaymentMethod,
+  ProductRow,
+  SalePaymentMode,
+} from '@/types/database';
+import {
+  formatCentsToBRL,
+  formatDateBR,
+  maskBRLCurrencyInput,
+  parseBRLInputToCents,
+} from '@/utils/formatters';
+
+const INSTALLMENT_QUICK_COUNTS = [1, 2, 3, 4, 6, 12];
 
 export default function NewSaleScreen() {
   const router = useRouter();
@@ -69,6 +89,15 @@ export default function NewSaleScreen() {
 
   const [discountInput, setDiscountInput] = useState('');
   const [notes, setNotes] = useState('');
+
+  const [paymentMode, setPaymentMode] = useState<SalePaymentMode>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
+  const [downPaymentInput, setDownPaymentInput] = useState('');
+  const [installmentCountInput, setInstallmentCountInput] = useState('1');
+  const [firstDueDateInput, setFirstDueDateInput] = useState(() =>
+    formatDateBR(addDaysToISODate(getTodayISODate(), 30)),
+  );
+
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -119,6 +148,21 @@ export default function NewSaleScreen() {
               : '',
           );
           setNotes(draftDetail.sale.notes ?? '');
+          setPaymentMode(draftDetail.sale.payment_mode ?? 'cash');
+          setPaymentMethod(draftDetail.sale.payment_method ?? 'pix');
+          setDownPaymentInput(
+            (draftDetail.sale.down_payment_cents ?? 0) > 0
+              ? ((draftDetail.sale.down_payment_cents ?? 0) / 100)
+                  .toFixed(2)
+                  .replace('.', ',')
+              : '',
+          );
+          setInstallmentCountInput(
+            String(draftDetail.sale.installment_count ?? 1),
+          );
+          if (draftDetail.sale.first_due_date) {
+            setFirstDueDateInput(formatDateBR(draftDetail.sale.first_due_date));
+          }
 
           const hydratedCart: SaleCartItem[] = draftDetail.items.map((item) => {
             const catalogProduct = activeProducts.find(
@@ -181,7 +225,17 @@ export default function NewSaleScreen() {
   // Regenera chave de idempotência quando a intenção de venda muda
   useEffect(() => {
     idempotencyKeyRef.current = createSaleIdempotencyKey();
-  }, [cart, selectedCustomerId, discountInput, notes]);
+  }, [
+    cart,
+    selectedCustomerId,
+    discountInput,
+    notes,
+    paymentMode,
+    paymentMethod,
+    downPaymentInput,
+    installmentCountInput,
+    firstDueDateInput,
+  ]);
 
   const selectedCustomer = useMemo(
     () => customers.find((c) => c.id === selectedCustomerId) ?? null,
@@ -223,6 +277,28 @@ export default function NewSaleScreen() {
     [cart, discountCents],
   );
 
+  const installmentPreview = useMemo(() => {
+    const downCents = parseBRLInputToCents(downPaymentInput) ?? 0;
+    const count = Math.max(1, Number(installmentCountInput) || 1);
+    const firstISO =
+      parseBRDateInputToISO(firstDueDateInput) ??
+      addDaysToISODate(getTodayISODate(), 30);
+
+    return buildInstallmentPreview({
+      totalCents: totals.totalCents,
+      paymentMode,
+      downPaymentCents: Math.max(0, downCents),
+      installmentCount: count,
+      firstDueDateISO: firstISO,
+    });
+  }, [
+    downPaymentInput,
+    firstDueDateInput,
+    installmentCountInput,
+    paymentMode,
+    totals.totalCents,
+  ]);
+
   async function handleSubmit(confirmImmediately: boolean): Promise<void> {
     if (!workspaceId || isSubmitting) {
       return;
@@ -235,6 +311,11 @@ export default function NewSaleScreen() {
       discountInput,
       notes,
       confirmImmediately,
+      paymentMode,
+      paymentMethod,
+      downPaymentInput,
+      installmentCountInput,
+      firstDueDateInput,
     });
 
     if (!validation.success || !validation.payload) {
@@ -255,6 +336,11 @@ export default function NewSaleScreen() {
             discountCents: validation.payload.discountCents,
             notes: validation.payload.notes,
             confirmImmediately: validation.payload.confirmImmediately,
+            paymentMode: validation.payload.paymentMode,
+            paymentMethod: validation.payload.paymentMethod,
+            downPaymentCents: validation.payload.downPaymentCents,
+            installmentCount: validation.payload.installmentCount,
+            firstDueDateISO: validation.payload.firstDueDateISO,
           })
         : await createOrConfirmWorkspaceSale({
             workspaceId,
@@ -264,6 +350,11 @@ export default function NewSaleScreen() {
             notes: validation.payload.notes,
             confirmImmediately: validation.payload.confirmImmediately,
             idempotencyKey: idempotencyKeyRef.current,
+            paymentMode: validation.payload.paymentMode,
+            paymentMethod: validation.payload.paymentMethod,
+            downPaymentCents: validation.payload.downPaymentCents,
+            installmentCount: validation.payload.installmentCount,
+            firstDueDateISO: validation.payload.firstDueDateISO,
           });
 
       router.replace(`/sales/${result.sale_id}`);
@@ -635,9 +726,209 @@ export default function NewSaleScreen() {
         ) : null}
       </View>
 
-      {/* 3. Desconto, Observação e Fechamento (RF-042 / RF-043) */}
+      {/* 3. Condição de Pagamento e Parcelamento (RF-050 / RF-051) */}
       <View style={styles.card}>
-        <Text style={styles.sectionTitle}>3. Resumo e fechamento</Text>
+        <Text style={styles.sectionTitle}>3. Condição de pagamento</Text>
+
+        <View style={styles.modeSelectorRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ selected: paymentMode === 'cash' }}
+            onPress={() => {
+              setPaymentMode('cash');
+              setSubmitError(null);
+            }}
+            style={[
+              styles.modeCard,
+              paymentMode === 'cash' ? styles.modeCardActive : null,
+            ]}
+          >
+            <Ionicons
+              name="flash-outline"
+              size={20}
+              color={
+                paymentMode === 'cash'
+                  ? colors.primaryDark
+                  : colors.textSecondary
+              }
+            />
+            <Text
+              style={[
+                styles.modeCardTitle,
+                paymentMode === 'cash' ? styles.modeCardTitleActive : null,
+              ]}
+            >
+              À vista
+            </Text>
+            <Text style={styles.modeCardSub}>Quitada no ato</Text>
+          </Pressable>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ selected: paymentMode === 'installments' }}
+            onPress={() => {
+              setPaymentMode('installments');
+              setSubmitError(null);
+            }}
+            style={[
+              styles.modeCard,
+              paymentMode === 'installments' ? styles.modeCardActive : null,
+            ]}
+          >
+            <Ionicons
+              name="calendar-outline"
+              size={20}
+              color={
+                paymentMode === 'installments'
+                  ? colors.primaryDark
+                  : colors.textSecondary
+              }
+            />
+            <Text
+              style={[
+                styles.modeCardTitle,
+                paymentMode === 'installments'
+                  ? styles.modeCardTitleActive
+                  : null,
+              ]}
+            >
+              Parcelado / A prazo
+            </Text>
+            <Text style={styles.modeCardSub}>Com ou sem entrada</Text>
+          </Pressable>
+        </View>
+
+        <Text style={styles.subLabel}>
+          {paymentMode === 'cash'
+            ? 'Forma de recebimento'
+            : 'Forma de recebimento da entrada / padrão'}
+        </Text>
+        <View style={styles.chipGrid}>
+          {PAYMENT_METHOD_OPTIONS.map((opt) => {
+            const isSelected = paymentMethod === opt.value;
+            return (
+              <Pressable
+                key={opt.value}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSelected }}
+                onPress={() => setPaymentMethod(opt.value)}
+                style={[
+                  styles.methodChip,
+                  isSelected ? styles.methodChipSelected : null,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.methodChipText,
+                    isSelected ? styles.methodChipTextSelected : null,
+                  ]}
+                >
+                  {opt.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {paymentMode === 'installments' ? (
+          <View style={styles.installmentsConfigBox}>
+            <FormField
+              label="Entrada em R$ (opcional)"
+              placeholder="0,00"
+              keyboardType="decimal-pad"
+              value={downPaymentInput}
+              onChangeText={(val) => {
+                setDownPaymentInput(maskBRLCurrencyInput(val));
+                setSubmitError(null);
+              }}
+            />
+
+            <DatePickerField
+              label="1º vencimento *"
+              value={firstDueDateInput}
+              onChangeDate={(val) => {
+                setFirstDueDateInput(val);
+                setSubmitError(null);
+              }}
+            />
+
+            <Text style={styles.subLabel}>Quantidade de parcelas</Text>
+            <View style={styles.chipGrid}>
+              {INSTALLMENT_QUICK_COUNTS.map((countVal) => {
+                const isSelected =
+                  Number(installmentCountInput) === countVal;
+                return (
+                  <Pressable
+                    key={countVal}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isSelected }}
+                    onPress={() => {
+                      setInstallmentCountInput(String(countVal));
+                      setSubmitError(null);
+                    }}
+                    style={[
+                      styles.methodChip,
+                      isSelected ? styles.methodChipSelected : null,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.methodChipText,
+                        isSelected ? styles.methodChipTextSelected : null,
+                      ]}
+                    >
+                      {countVal}x
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <FormField
+              label="Ou digite o número de parcelas (1 a 36)"
+              placeholder="1"
+              keyboardType="number-pad"
+              value={installmentCountInput}
+              onChangeText={(val) => {
+                setInstallmentCountInput(val);
+                setSubmitError(null);
+              }}
+            />
+
+            {installmentPreview.length > 0 && totals.totalCents > 0 ? (
+              <View style={styles.previewScheduleBox}>
+                <Text style={styles.previewScheduleTitle}>
+                  Cronograma de parcelas ({installmentPreview.length})
+                </Text>
+                {installmentPreview.slice(0, 6).map((p) => (
+                  <View
+                    key={`${p.installmentNumber}_${p.dueDateISO}`}
+                    style={styles.previewScheduleRow}
+                  >
+                    <Text style={styles.previewScheduleLabel}>
+                      {p.isEntry
+                        ? `Entrada (hoje — ${formatDateBR(p.dueDateISO)})`
+                        : `Parcela ${p.installmentNumber}/${p.totalInstallments} (${formatDateBR(p.dueDateISO)})`}
+                    </Text>
+                    <Text style={styles.previewScheduleAmount}>
+                      {formatCentsToBRL(p.amountCents)}
+                    </Text>
+                  </View>
+                ))}
+                {installmentPreview.length > 6 ? (
+                  <Text style={styles.previewMoreText}>
+                    + {installmentPreview.length - 6} parcelas mensais seguintes
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+      </View>
+
+      {/* 4. Desconto, Observação e Fechamento (RF-042 / RF-043) */}
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>4. Resumo e fechamento</Text>
 
         <FormField
           label="Desconto em R$ (opcional)"
@@ -645,7 +936,7 @@ export default function NewSaleScreen() {
           keyboardType="decimal-pad"
           value={discountInput}
           onChangeText={(val) => {
-            setDiscountInput(val);
+            setDiscountInput(maskBRLCurrencyInput(val));
             setSubmitError(null);
           }}
         />
@@ -945,6 +1236,115 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
     paddingTop: spacing.md,
+  },
+  modeSelectorRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    marginBottom: spacing.md,
+  },
+  modeCard: {
+    flex: 1,
+    backgroundColor: colors.background,
+    borderRadius: radius.controlLg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: 4,
+  },
+  modeCardActive: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
+  },
+  modeCardTitle: {
+    ...typography.bodyStrong,
+    color: colors.text,
+  },
+  modeCardTitleActive: {
+    color: colors.primaryDark,
+  },
+  modeCardSub: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  subLabel: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: spacing.xs,
+  },
+  chipGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  methodChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  methodChipSelected: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
+  },
+  methodChipText: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  methodChipTextSelected: {
+    color: colors.primaryDark,
+  },
+  installmentsConfigBox: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: spacing.md,
+  },
+  twoCols: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  halfCol: {
+    flex: 1,
+  },
+  previewScheduleBox: {
+    backgroundColor: colors.background,
+    borderRadius: radius.control,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: 6,
+  },
+  previewScheduleTitle: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 2,
+  },
+  previewScheduleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  previewScheduleLabel: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    flex: 1,
+  },
+  previewScheduleAmount: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: colors.primaryDark,
+  },
+  previewMoreText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
   },
   summaryBox: {
     backgroundColor: colors.primarySoft,

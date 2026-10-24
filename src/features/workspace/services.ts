@@ -37,7 +37,7 @@ export async function fetchUserWorkspaces(
   const workspaceIds = memberships.map((item) => item.workspace_id);
   const { data: workspacesData, error: workspacesError } = await supabase
     .from('workspaces')
-    .select('id, name, owner_id, currency_code, created_at, updated_at')
+    .select('*')
     .in('id', workspaceIds);
 
   if (workspacesError) {

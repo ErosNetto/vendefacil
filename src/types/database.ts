@@ -13,6 +13,10 @@ export type WorkspaceRow = {
   name: string;
   owner_id: string;
   currency_code: 'BRL';
+  late_fee_enabled?: boolean;
+  default_fine_percent?: number;
+  default_monthly_interest_percent?: number;
+  grace_period_days?: number;
   created_at: string;
   updated_at: string;
 };
@@ -135,6 +139,18 @@ export type AdjustStockRpcResult = {
 
 export type SaleStatus = 'draft' | 'confirmed' | 'cancelled';
 
+export type PaymentMethod =
+  | 'pix'
+  | 'cash'
+  | 'credit_card'
+  | 'debit_card'
+  | 'bank_transfer'
+  | 'other';
+
+export type InstallmentStatus = 'pending' | 'partial' | 'paid' | 'cancelled';
+
+export type SalePaymentMode = 'cash' | 'installments';
+
 export type SaleRow = {
   id: string;
   workspace_id: string;
@@ -150,6 +166,11 @@ export type SaleRow = {
   notes: string | null;
   cancellation_reason: string | null;
   idempotency_key: string;
+  payment_mode?: SalePaymentMode;
+  payment_method?: PaymentMethod;
+  down_payment_cents?: number;
+  installment_count?: number;
+  first_due_date?: string | null;
   confirmed_at: string | null;
   cancelled_at: string | null;
   created_by: string | null;
@@ -170,6 +191,87 @@ export type SaleItemRow = {
   line_total_cents: number;
   line_cost_cents: number;
   created_at: string;
+};
+
+export type InstallmentRow = {
+  id: string;
+  workspace_id: string;
+  sale_id: string;
+  customer_id: string | null;
+  customer_name_snapshot: string | null;
+  installment_number: number;
+  total_installments: number;
+  due_date: string;
+  principal_cents: number;
+  paid_principal_cents: number;
+  accrued_fine_cents: number;
+  accrued_interest_cents: number;
+  paid_total_cents: number;
+  remaining_principal_cents: number;
+  status: InstallmentStatus;
+  paid_at: string | null;
+  cancelled_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PaymentRow = {
+  id: string;
+  workspace_id: string;
+  sale_id: string | null;
+  customer_id: string | null;
+  payment_method: PaymentMethod;
+  amount_cents: number;
+  principal_allocated_cents: number;
+  fine_cents: number;
+  interest_cents: number;
+  paid_at: string;
+  notes: string | null;
+  idempotency_key: string;
+  is_reversed: boolean;
+  reversed_at: string | null;
+  reversal_reason: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type PaymentAllocationRow = {
+  id: string;
+  workspace_id: string;
+  payment_id: string;
+  installment_id: string;
+  principal_allocated_cents: number;
+  fine_allocated_cents: number;
+  interest_allocated_cents: number;
+  total_allocated_cents: number;
+  created_at: string;
+};
+
+export type LinkSaleCustomerRpcResult = {
+  success: boolean;
+  sale_id: string;
+  customer_id: string | null;
+  customer_name_snapshot: string | null;
+};
+
+export type RecordInstallmentPaymentRpcResult = {
+  payment_id: string;
+  workspace_id: string;
+  amount_cents: number;
+  principal_allocated_cents: number;
+  fine_cents: number;
+  interest_cents: number;
+  paid_at: string;
+  idempotent_replay: boolean;
+};
+
+export type UpdateWorkspaceFinanceSettingsRpcResult = {
+  workspace_id: string;
+  late_fee_enabled: boolean;
+  default_fine_percent: number;
+  default_monthly_interest_percent: number;
+  grace_period_days: number;
 };
 
 export type CreateOrConfirmSaleRpcResult = {
@@ -241,11 +343,19 @@ export type Database = {
           name: string;
           owner_id: string;
           currency_code?: 'BRL';
+          late_fee_enabled?: boolean;
+          default_fine_percent?: number;
+          default_monthly_interest_percent?: number;
+          grace_period_days?: number;
           created_at?: string;
           updated_at?: string;
         };
         Update: {
           name?: string;
+          late_fee_enabled?: boolean;
+          default_fine_percent?: number;
+          default_monthly_interest_percent?: number;
+          grace_period_days?: number;
           updated_at?: string;
         };
         Relationships: [];
@@ -520,6 +630,81 @@ export type Database = {
           },
         ];
       };
+      installments: {
+        Row: InstallmentRow;
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          sale_id: string;
+          customer_id?: string | null;
+          customer_name_snapshot?: string | null;
+          installment_number: number;
+          total_installments: number;
+          due_date: string;
+          principal_cents: number;
+          paid_principal_cents?: number;
+          accrued_fine_cents?: number;
+          accrued_interest_cents?: number;
+          paid_total_cents?: number;
+          remaining_principal_cents: number;
+          status?: InstallmentStatus;
+          paid_at?: string | null;
+          cancelled_at?: string | null;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          status?: InstallmentStatus;
+          notes?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      payments: {
+        Row: PaymentRow;
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          sale_id?: string | null;
+          customer_id?: string | null;
+          payment_method?: PaymentMethod;
+          amount_cents: number;
+          principal_allocated_cents: number;
+          fine_cents?: number;
+          interest_cents?: number;
+          paid_at?: string;
+          notes?: string | null;
+          idempotency_key: string;
+          is_reversed?: boolean;
+          reversed_at?: string | null;
+          reversal_reason?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          notes?: string | null;
+        };
+        Relationships: [];
+      };
+      payment_allocations: {
+        Row: PaymentAllocationRow;
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          payment_id: string;
+          installment_id: string;
+          principal_allocated_cents: number;
+          fine_allocated_cents?: number;
+          interest_allocated_cents?: number;
+          total_allocated_cents: number;
+          created_at?: string;
+        };
+        Update: {
+          total_allocated_cents?: number;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -585,6 +770,11 @@ export type Database = {
           p_notes?: string | null;
           p_confirm_immediately?: boolean;
           p_idempotency_key?: string;
+          p_payment_mode?: SalePaymentMode;
+          p_payment_method?: PaymentMethod;
+          p_down_payment_cents?: number;
+          p_installment_count?: number;
+          p_first_due_date?: string | null;
         };
         Returns: CreateOrConfirmSaleRpcResult;
       };
@@ -612,14 +802,53 @@ export type Database = {
           p_discount_cents?: number;
           p_notes?: string | null;
           p_confirm_immediately?: boolean;
+          p_payment_mode?: SalePaymentMode;
+          p_payment_method?: PaymentMethod;
+          p_down_payment_cents?: number;
+          p_installment_count?: number;
+          p_first_due_date?: string | null;
         };
         Returns: CreateOrConfirmSaleRpcResult;
+      };
+      update_workspace_finance_settings: {
+        Args: {
+          p_workspace_id: string;
+          p_late_fee_enabled: boolean;
+          p_default_fine_percent: number;
+          p_default_monthly_interest_percent: number;
+          p_grace_period_days: number;
+        };
+        Returns: UpdateWorkspaceFinanceSettingsRpcResult;
+      };
+      record_installment_payment: {
+        Args: {
+          p_workspace_id: string;
+          p_installment_ids: string[];
+          p_principal_payment_cents: number;
+          p_fine_cents?: number;
+          p_interest_cents?: number;
+          p_payment_method?: PaymentMethod;
+          p_notes?: string | null;
+          p_idempotency_key?: string;
+        };
+        Returns: RecordInstallmentPaymentRpcResult;
+      };
+      link_sale_customer: {
+        Args: {
+          p_workspace_id: string;
+          p_sale_id: string;
+          p_customer_id?: string | null;
+        };
+        Returns: LinkSaleCustomerRpcResult;
       };
     };
     Enums: {
       workspace_role: WorkspaceRole;
       stock_movement_type: StockMovementType;
       sale_status: SaleStatus;
+      payment_method: PaymentMethod;
+      installment_status: InstallmentStatus;
+      sale_payment_mode: SalePaymentMode;
     };
     CompositeTypes: {
       [_ in never]: never;

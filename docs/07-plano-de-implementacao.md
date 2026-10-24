@@ -46,11 +46,15 @@
 > **Nota de validação da Fase 5:** Execute `supabase/migrations/20261018000005_phase5_sales.sql` no SQL Editor do Supabase para criar as tabelas `sales` e `sale_items` e as RPCs transacionais `create_or_confirm_sale`, `update_draft_sale`, `confirm_draft_sale` e `cancel_sale`.
 
 ## Fase 6 — Financeiro
-- [ ] Entrada, parcelas e contas a receber.
-- [ ] Pagamentos parciais e alocações.
-- [ ] RPC transacional.
-- [ ] Definir juros antes de programar.
-- [ ] Testes de arredondamento e atraso.
+- [x] Entrada, parcelas e contas a receber (`src/app/(tabs)/finance.tsx`, `src/app/sales/new.tsx`, `src/app/sales/[id]/index.tsx`, `src/app/customers/[id]/index.tsx`).
+- [x] Pagamentos parciais e alocações (`public.installments`, `public.payments`, `public.payment_allocations`, `src/features/finance/ReceivePaymentModal.tsx`).
+- [x] RPC transacional (`record_installment_payment`, `update_workspace_finance_settings`, `generate_sale_installments_internal` em `supabase/migrations/20261018000006_phase6_finance.sql`).
+- [x] Definir juros antes de programar (regras padrão configuráveis por loja em `public.workspaces` + cálculo sugerido e editável/isentável por recebimento em `src/features/finance/FinanceSettingsCard.tsx` e `src/features/finance/schemas.ts`).
+- [x] Testes de arredondamento e atraso (`src/features/finance/schemas.test.ts` e `supabase/tests/phase6_finance_rls_and_rpc_test.sql`).
+- [x] Vincular cliente a venda avulsa e atualizar parcelas (`supabase/migrations/20261024000007_link_sale_customer.sql`, `supabase/tests/link_sale_customer_test.sql`, `src/features/sales/services.ts`, `src/app/sales/[id]/index.tsx`).
+- [x] Máscaras BRL, máscara de data e seletor `DatePickerField` (`src/utils/formatters.ts`, `src/components/ui/DatePickerField.tsx`, `src/features/products/ProductForm.tsx`, `src/app/sales/new.tsx`).
+
+> **Nota de validação da Fase 6 e Complementos:** Execute `supabase/migrations/20261018000006_phase6_finance.sql` e `supabase/migrations/20261024000007_link_sale_customer.sql` no SQL Editor do Supabase. Validações automatizadas disponíveis em `supabase/tests/phase6_finance_rls_and_rpc_test.sql` e `supabase/tests/link_sale_customer_test.sql`.
 
 ## Fase 7 — Dashboard/calendário
 - [ ] Métricas reais por período.

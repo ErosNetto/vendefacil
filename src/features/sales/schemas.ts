@@ -1,6 +1,17 @@
 import { z } from 'zod';
 
-import type { ProductRow, SaleRow, SaleStatus } from '@/types/database';
+import {
+  addDaysToISODate,
+  getTodayISODate,
+  parseBRDateInputToISO,
+} from '@/features/finance/schemas';
+import type {
+  PaymentMethod,
+  ProductRow,
+  SalePaymentMode,
+  SaleRow,
+  SaleStatus,
+} from '@/types/database';
 import { parseBRLInputToCents } from '@/utils/formatters';
 
 export interface SaleStatusMeta {
@@ -168,6 +179,11 @@ export interface ValidateSaleSubmissionInput {
   discountInput: string;
   notes: string;
   confirmImmediately: boolean;
+  paymentMode?: SalePaymentMode;
+  paymentMethod?: PaymentMethod;
+  downPaymentInput?: string;
+  installmentCountInput?: string | number;
+  firstDueDateInput?: string;
 }
 
 export interface ValidatedSaleSubmissionResult {
@@ -178,6 +194,11 @@ export interface ValidatedSaleSubmissionResult {
     discountCents: number;
     notes: string | null;
     confirmImmediately: boolean;
+    paymentMode: SalePaymentMode;
+    paymentMethod: PaymentMethod;
+    downPaymentCents: number;
+    installmentCount: number;
+    firstDueDateISO: string | null;
   };
 }
 
@@ -233,6 +254,70 @@ export function validateSaleSubmission(
     };
   }
 
+  const paymentMode: SalePaymentMode = input.paymentMode ?? 'cash';
+  const paymentMethod: PaymentMethod = input.paymentMethod ?? 'pix';
+  let downPaymentCents = 0;
+  let installmentCount = 1;
+  let firstDueDateISO: string | null = null;
+
+  if (paymentMode === 'installments') {
+    const rawDown = (input.downPaymentInput ?? '').trim();
+    if (rawDown) {
+      const parsedDown = parseBRLInputToCents(rawDown);
+      if (parsedDown === null || parsedDown < 0) {
+        return {
+          success: false,
+          errorMessage: 'Informe um valor de entrada válido em reais (ou 0,00).',
+        };
+      }
+      downPaymentCents = parsedDown;
+    }
+
+    if (downPaymentCents >= totals.totalCents) {
+      return {
+        success: false,
+        errorMessage:
+          'O valor de entrada deve ser menor que o total da venda na modalidade parcelada.',
+      };
+    }
+
+    const rawCount =
+      typeof input.installmentCountInput === 'number'
+        ? input.installmentCountInput
+        : Number(String(input.installmentCountInput ?? '1').trim());
+
+    if (!Number.isInteger(rawCount) || rawCount < 1 || rawCount > 36) {
+      return {
+        success: false,
+        errorMessage: 'A quantidade de parcelas deve estar entre 1 e 36.',
+      };
+    }
+    installmentCount = rawCount;
+
+    if (totals.totalCents - downPaymentCents < installmentCount) {
+      return {
+        success: false,
+        errorMessage:
+          'O saldo restante a parcelar é insuficiente para o número de parcelas escolhido.',
+      };
+    }
+
+    const rawFirstDue = (input.firstDueDateInput ?? '').trim();
+    if (rawFirstDue) {
+      const parsedDate = parseBRDateInputToISO(rawFirstDue);
+      if (!parsedDate) {
+        return {
+          success: false,
+          errorMessage:
+            'Informe uma data válida para o 1º vencimento no formato dd/MM/aaaa.',
+        };
+      }
+      firstDueDateISO = parsedDate;
+    } else {
+      firstDueDateISO = addDaysToISODate(getTodayISODate(), 30);
+    }
+  }
+
   return {
     success: true,
     payload: {
@@ -243,6 +328,11 @@ export function validateSaleSubmission(
       discountCents,
       notes: cleanNotes ? cleanNotes : null,
       confirmImmediately: input.confirmImmediately,
+      paymentMode,
+      paymentMethod,
+      downPaymentCents,
+      installmentCount,
+      firstDueDateISO,
     },
   };
 }

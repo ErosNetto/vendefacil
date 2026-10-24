@@ -108,3 +108,62 @@ export function distributeCentsAcrossInstallments(
     index < remainder ? baseInstallment + 1 : baseInstallment,
   );
 }
+
+/**
+ * Aplica máscara de telefone brasileiro: (XX) XXXXX-XXXX ou (XX) XXXX-XXXX.
+ */
+export function maskPhoneBR(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 11);
+  if (!digits) {
+    return '';
+  }
+  if (digits.length <= 2) {
+    return `(${digits}`;
+  }
+  if (digits.length <= 6) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  }
+  if (digits.length <= 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  }
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
+/**
+ * Aplica máscara de data brasileira enquanto digita: DD/MM/YYYY.
+ */
+export function maskDateBR(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 8);
+  if (!digits) {
+    return '';
+  }
+  if (digits.length <= 2) {
+    return digits;
+  }
+  if (digits.length <= 4) {
+    return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  }
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+}
+
+/**
+ * Aplica máscara dinâmica de moeda BRL a partir dos dígitos digitados.
+ * Ex.: "1" -> "0,01", "10" -> "0,10", "100" -> "1,00", "150000" -> "1.500,00".
+ * Permite limpar voltando para string vazia.
+ */
+export function maskBRLCurrencyInput(raw: string): string {
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) {
+    return '';
+  }
+  const numericValue = parseInt(digits, 10);
+  if (numericValue === 0) {
+    return '0,00';
+  }
+  const centsString = digits.padStart(3, '0');
+  const wholePart = centsString.slice(0, -2);
+  const decimalPart = centsString.slice(-2);
+  const formattedWhole = parseInt(wholePart, 10).toLocaleString('pt-BR');
+  return `${formattedWhole},${decimalPart}`;
+}
+

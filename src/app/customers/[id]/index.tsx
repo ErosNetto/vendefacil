@@ -24,22 +24,52 @@ import {
   mapCustomerServiceError,
   setWorkspaceCustomerArchived,
 } from '@/features/customers/services';
+import { ReceivePaymentModal } from '@/features/finance/ReceivePaymentModal';
+import {
+  getInstallmentDisplayMeta,
+  getWorkspaceFinanceSettings,
+} from '@/features/finance/schemas';
+import {
+  listWorkspaceInstallments,
+  listWorkspacePayments,
+} from '@/features/finance/services';
 import {
   calculateSalesOverviewMetrics,
   SALE_STATUS_META,
 } from '@/features/sales/schemas';
 import { listWorkspaceSales } from '@/features/sales/services';
-import type { CustomerRow, SaleRow } from '@/types/database';
-import { formatDateBR, formatDateTimeBR } from '@/utils/formatters';
+import type {
+  CustomerRow,
+  InstallmentRow,
+  PaymentRow,
+  SaleRow,
+} from '@/types/database';
+import {
+  formatCentsToBRL,
+  formatDateBR,
+  formatDateTimeBR,
+} from '@/utils/formatters';
 
 export default function CustomerDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { activeWorkspace } = useSession();
   const workspaceId = activeWorkspace?.workspace.id ?? null;
+  const financeSettings = getWorkspaceFinanceSettings(
+    activeWorkspace?.workspace,
+  );
 
   const [customer, setCustomer] = useState<CustomerRow | null>(null);
   const [customerSales, setCustomerSales] = useState<SaleRow[]>([]);
+  const [customerInstallments, setCustomerInstallments] = useState<
+    InstallmentRow[]
+  >([]);
+  const [customerPayments, setCustomerPayments] = useState<PaymentRow[]>([]);
+  const [paymentModalInstallments, setPaymentModalInstallments] = useState<
+    InstallmentRow[]
+  >([]);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [confirmArchiveVisible, setConfirmArchiveVisible] = useState(false);
@@ -59,15 +89,21 @@ export default function CustomerDetailScreen() {
         setErrorMessage('Cliente não encontrado neste espaço de trabalho.');
       } else {
         setCustomer(record);
-        try {
-          const sales = await listWorkspaceSales({
+        const [sales, installments, payments] = await Promise.all([
+          listWorkspaceSales({
             workspaceId,
             customerId: record.id,
-          });
-          setCustomerSales(sales);
-        } catch {
-          setCustomerSales([]);
-        }
+          }).catch(() => []),
+          listWorkspaceInstallments(workspaceId, {
+            customerId: record.id,
+          }).catch(() => []),
+          listWorkspacePayments(workspaceId, {
+            customerId: record.id,
+          }).catch(() => []),
+        ]);
+        setCustomerSales(sales);
+        setCustomerInstallments(installments);
+        setCustomerPayments(payments);
       }
     } catch (error) {
       setErrorMessage(mapCustomerServiceError(error));
@@ -85,6 +121,36 @@ export default function CustomerDetailScreen() {
   const salesMetrics = useMemo(
     () => calculateSalesOverviewMetrics(customerSales),
     [customerSales],
+  );
+
+  const openInstallments = useMemo(
+    () =>
+      customerInstallments.filter(
+        (i) =>
+          i.status !== 'cancelled' &&
+          i.status !== 'paid' &&
+          i.remaining_principal_cents > 0,
+      ),
+    [customerInstallments],
+  );
+
+  const openPrincipalCents = useMemo(
+    () =>
+      openInstallments.reduce(
+        (sum, item) => sum + item.remaining_principal_cents,
+        0,
+      ),
+    [openInstallments],
+  );
+
+  const validPayments = useMemo(
+    () => customerPayments.filter((p) => !p.is_reversed),
+    [customerPayments],
+  );
+
+  const totalPaidCents = useMemo(
+    () => validPayments.reduce((sum, p) => sum + p.amount_cents, 0),
+    [validPayments],
   );
 
   async function handleToggleArchive(): Promise<void> {
@@ -266,19 +332,89 @@ export default function CustomerDetailScreen() {
         />
         <MetricCard
           title="Total pago"
-          cents={0}
-          subtitle="0 recebimentos (Fase 6)"
+          cents={totalPaidCents}
+          subtitle={
+            validPayments.length === 1
+              ? '1 recebimento registrado'
+              : `${validPayments.length} recebimentos registrados`
+          }
           tone="primary"
           iconName="cash-outline"
         />
         <MetricCard
           title="Saldo em aberto"
-          cents={0}
-          subtitle="0 parcelas pendentes (Fase 6)"
-          tone="warning"
+          cents={openPrincipalCents}
+          subtitle={
+            openInstallments.length === 1
+              ? '1 parcela pendente'
+              : `${openInstallments.length} parcelas pendentes`
+          }
+          tone={openPrincipalCents > 0 ? 'warning' : 'default'}
           iconName="time-outline"
         />
       </View>
+
+      {openInstallments.length > 0 ? (
+        <View style={styles.receivablesSection}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitleNoMargin}>
+              Parcelas em aberto ({openInstallments.length})
+            </Text>
+            {openInstallments.length > 1 ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  setPaymentModalInstallments(openInstallments);
+                  setIsPaymentModalOpen(true);
+                }}
+                style={styles.batchPayBtn}
+              >
+                <Text style={styles.batchPayBtnText}>Receber várias</Text>
+              </Pressable>
+            ) : null}
+          </View>
+
+          <View style={styles.salesList}>
+            {openInstallments.map((inst) => {
+              const meta = getInstallmentDisplayMeta(inst);
+              return (
+                <View key={inst.id} style={styles.saleItemCard}>
+                  <View style={styles.saleItemLeft}>
+                    <Text style={styles.saleItemTitle}>
+                      {inst.installment_number === 0
+                        ? 'Entrada'
+                        : `Parcela ${inst.installment_number}/${inst.total_installments}`}{' '}
+                      • Venc.: {formatDateBR(inst.due_date)}
+                    </Text>
+                    <Text style={styles.saleItemMeta}>
+                      Valor original: {formatCentsToBRL(inst.principal_cents)}
+                    </Text>
+                  </View>
+
+                  <View style={styles.saleItemRight}>
+                    <StatusBadge label={meta.label} tone={meta.tone} />
+                    <MoneyText
+                      cents={inst.remaining_principal_cents}
+                      size="sm"
+                      tone={meta.state === 'overdue' ? 'error' : 'primary'}
+                    />
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => {
+                        setPaymentModalInstallments([inst]);
+                        setIsPaymentModalOpen(true);
+                      }}
+                      style={styles.receivePillBtn}
+                    >
+                      <Text style={styles.receivePillBtnText}>Receber</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      ) : null}
 
       <Text style={styles.sectionTitle}>
         Histórico de vendas ({customerSales.length})
@@ -362,6 +498,20 @@ export default function CustomerDetailScreen() {
         }}
         onCancel={() => setConfirmArchiveVisible(false)}
       />
+
+      {workspaceId ? (
+        <ReceivePaymentModal
+          visible={isPaymentModalOpen}
+          workspaceId={workspaceId}
+          installments={paymentModalInstallments}
+          financeSettings={financeSettings}
+          onClose={() => setIsPaymentModalOpen(false)}
+          onSuccess={() => {
+            setIsPaymentModalOpen(false);
+            void loadCustomer();
+          }}
+        />
+      ) : null}
     </Screen>
   );
 }
@@ -437,6 +587,45 @@ const styles = StyleSheet.create({
     ...typography.section,
     color: colors.text,
     marginBottom: spacing.md,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  sectionTitleNoMargin: {
+    ...typography.section,
+    color: colors.text,
+  },
+  receivablesSection: {
+    marginBottom: spacing.xl,
+  },
+  batchPayBtn: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  batchPayBtnText: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.primaryDark,
+  },
+  receivePillBtn: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    marginTop: 2,
+  },
+  receivePillBtnText: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: colors.surface,
   },
   metricsGrid: {
     flexDirection: 'row',

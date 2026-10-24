@@ -2,6 +2,7 @@ export * from './AppHeader';
 export * from './Buttons';
 export * from './ConfirmDialog';
 export * from './CustomerRow';
+export * from './DatePickerField';
 export * from './FeedbackStates';
 export * from './FormField';
 export * from './ProductCard';

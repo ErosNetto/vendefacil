@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import {
   AppHeader,
@@ -12,34 +12,69 @@ import {
   MoneyText,
   PrimaryButton,
   Screen,
+  SearchField,
   SecondaryButton,
   StatusBadge,
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
+import { listWorkspaceCustomers } from '@/features/customers/services';
+import { ReceivePaymentModal } from '@/features/finance/ReceivePaymentModal';
+import {
+  calculateSuggestedLateCharges,
+  getInstallmentDisplayMeta,
+  getWorkspaceFinanceSettings,
+  PAYMENT_METHOD_LABELS,
+  SALE_PAYMENT_MODE_LABELS,
+} from '@/features/finance/schemas';
+import {
+  listWorkspaceInstallments,
+  listWorkspacePayments,
+} from '@/features/finance/services';
 import { cancelSaleSchema, SALE_STATUS_META } from '@/features/sales/schemas';
 import {
   cancelWorkspaceSale,
   confirmWorkspaceDraftSale,
   getWorkspaceSaleDetail,
+  linkSaleCustomer,
   mapSaleServiceError,
 } from '@/features/sales/services';
-import type { SaleItemRow, SaleRow } from '@/types/database';
-import { formatCentsToBRL, formatDateTimeBR } from '@/utils/formatters';
+import type {
+  CustomerRow,
+  InstallmentRow,
+  PaymentRow,
+  SaleItemRow,
+  SaleRow,
+} from '@/types/database';
+import {
+  formatCentsToBRL,
+  formatDateBR,
+  formatDateTimeBR,
+} from '@/utils/formatters';
 
 export default function SaleDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { activeWorkspace } = useSession();
   const workspaceId = activeWorkspace?.workspace.id ?? null;
+  const financeSettings = getWorkspaceFinanceSettings(
+    activeWorkspace?.workspace,
+  );
 
   const [sale, setSale] = useState<SaleRow | null>(null);
   const [items, setItems] = useState<SaleItemRow[]>([]);
+  const [installments, setInstallments] = useState<InstallmentRow[]>([]);
+  const [payments, setPayments] = useState<PaymentRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [confirmDraftModalOpen, setConfirmDraftModalOpen] = useState(false);
   const [isConfirmingDraft, setIsConfirmingDraft] = useState(false);
+
+  const [paymentModalInstallments, setPaymentModalInstallments] = useState<
+    InstallmentRow[]
+  >([]);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
 
   const [showCancelForm, setShowCancelForm] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
@@ -48,6 +83,80 @@ export default function SaleDetailScreen() {
   );
   const [isCancelling, setIsCancelling] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
+  const [customersList, setCustomersList] = useState<CustomerRow[]>([]);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [isLinkingCustomer, setIsLinkingCustomer] = useState(false);
+  const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
+
+  const filteredCustomers = useMemo(() => {
+    const q = customerSearch.trim().toLowerCase();
+    if (!q) {
+      return customersList;
+    }
+    return customersList.filter(
+      (c) =>
+        c.full_name.toLowerCase().includes(q) ||
+        (c.phone && c.phone.includes(q)),
+    );
+  }, [customerSearch, customersList]);
+
+  async function handleOpenCustomerPicker(): Promise<void> {
+    if (!workspaceId) {
+      return;
+    }
+    setIsCustomerModalOpen(true);
+    setCustomerSearch('');
+    setIsLoadingCustomers(true);
+    try {
+      const customers = await listWorkspaceCustomers(workspaceId);
+      setCustomersList(customers.filter((c) => !c.is_archived));
+    } catch {
+      setCustomersList([]);
+    } finally {
+      setIsLoadingCustomers(false);
+    }
+  }
+
+  async function handleSelectCustomer(
+    customer: CustomerRow | null,
+  ): Promise<void> {
+    if (!workspaceId || !sale || isLinkingCustomer) {
+      return;
+    }
+
+    setIsLinkingCustomer(true);
+    setActionError(null);
+    try {
+      const result = await linkSaleCustomer(
+        workspaceId,
+        sale.id,
+        customer ? customer.id : null,
+      );
+      setSale((prev) =>
+        prev
+          ? {
+              ...prev,
+              customer_id: result.customerId,
+              customer_name_snapshot: result.customerName,
+            }
+          : null,
+      );
+      setInstallments((prev) =>
+        prev.map((inst) => ({
+          ...inst,
+          customer_id: result.customerId,
+          customer_name_snapshot: result.customerName,
+        })),
+      );
+      setIsCustomerModalOpen(false);
+    } catch (err) {
+      setActionError(mapSaleServiceError(err));
+    } finally {
+      setIsLinkingCustomer(false);
+    }
+  }
 
   const loadSaleDetail = useCallback(async () => {
     if (!workspaceId || !id) {
@@ -58,13 +167,19 @@ export default function SaleDetailScreen() {
     setIsLoading(true);
     setErrorMessage(null);
     try {
-      const detail = await getWorkspaceSaleDetail(workspaceId, id);
+      const [detail, saleInstallments, salePayments] = await Promise.all([
+        getWorkspaceSaleDetail(workspaceId, id),
+        listWorkspaceInstallments(workspaceId, { saleId: id }).catch(() => []),
+        listWorkspacePayments(workspaceId, { saleId: id }).catch(() => []),
+      ]);
       if (!detail) {
         setErrorMessage('Venda não encontrada neste espaço de trabalho.');
         return;
       }
       setSale(detail.sale);
       setItems(detail.items);
+      setInstallments(saleInstallments);
+      setPayments(salePayments);
     } catch (error) {
       setErrorMessage(mapSaleServiceError(error));
     } finally {
@@ -186,12 +301,36 @@ export default function SaleDetailScreen() {
             </Text>
           </View>
           {sale.customer_id ? (
+            <View style={styles.customerButtonsCol}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => router.push(`/customers/${sale.customer_id}`)}
+                style={styles.openCustomerButton}
+              >
+                <Text style={styles.openCustomerText}>Ver ficha</Text>
+              </Pressable>
+              {sale.status !== 'cancelled' ? (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => void handleOpenCustomerPicker()}
+                  style={styles.changeCustomerButton}
+                >
+                  <Text style={styles.changeCustomerText}>Trocar</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : sale.status !== 'cancelled' ? (
             <Pressable
               accessibilityRole="button"
-              onPress={() => router.push(`/customers/${sale.customer_id}`)}
-              style={styles.openCustomerButton}
+              onPress={() => void handleOpenCustomerPicker()}
+              style={styles.linkCustomerButton}
             >
-              <Text style={styles.openCustomerText}>Ver ficha</Text>
+              <Ionicons
+                name="person-add-outline"
+                size={15}
+                color={colors.primaryDark}
+              />
+              <Text style={styles.linkCustomerText}>Vincular</Text>
             </Pressable>
           ) : null}
         </View>
@@ -279,6 +418,184 @@ export default function SaleDetailScreen() {
           ))}
         </View>
       </View>
+
+      {/* Parcelas e Histórico de Recebimentos (RF-050 a RF-057) */}
+      {sale.status === 'confirmed' || installments.length > 0 ? (
+        <View style={styles.card}>
+          <View style={styles.sectionHeaderRow}>
+            <View style={styles.sectionHeaderCol}>
+              <Text style={styles.sectionTitle}>
+                Parcelas e recebimentos ({installments.length})
+              </Text>
+              <Text style={styles.snapshotHint}>
+                {SALE_PAYMENT_MODE_LABELS[sale.payment_mode ?? 'cash']} •{' '}
+                {PAYMENT_METHOD_LABELS[sale.payment_method ?? 'pix']}
+              </Text>
+            </View>
+
+            {installments.filter(
+              (i) =>
+                i.status !== 'cancelled' &&
+                i.status !== 'paid' &&
+                i.remaining_principal_cents > 0,
+            ).length > 1 ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  setPaymentModalInstallments(
+                    installments.filter(
+                      (i) =>
+                        i.status !== 'cancelled' &&
+                        i.status !== 'paid' &&
+                        i.remaining_principal_cents > 0,
+                    ),
+                  );
+                  setIsPaymentModalOpen(true);
+                }}
+                style={styles.openCustomerButton}
+              >
+                <Text style={styles.openCustomerText}>Receber várias</Text>
+              </Pressable>
+            ) : null}
+          </View>
+
+          {installments.length > 0 ? (
+            <View style={styles.itemsList}>
+              {installments.map((inst) => {
+                const meta = getInstallmentDisplayMeta(inst);
+                const lateCalc = calculateSuggestedLateCharges({
+                  remainingPrincipalCents: inst.remaining_principal_cents,
+                  dueDateISO: inst.due_date,
+                  settings: financeSettings,
+                });
+                const isOpen =
+                  inst.status !== 'cancelled' &&
+                  inst.status !== 'paid' &&
+                  inst.remaining_principal_cents > 0;
+
+                return (
+                  <View key={inst.id} style={styles.installmentRow}>
+                    <View style={styles.installmentTopRow}>
+                      <View style={styles.itemLeftCol}>
+                        <Text style={styles.itemName}>
+                          {inst.installment_number === 0
+                            ? 'Entrada'
+                            : `Parcela ${inst.installment_number}/${inst.total_installments}`}
+                        </Text>
+                        <Text style={styles.itemSubMeta}>
+                          Venc.: {formatDateBR(inst.due_date)} • Principal:{' '}
+                          {formatCentsToBRL(inst.principal_cents)}
+                        </Text>
+                        {inst.paid_total_cents > 0 ? (
+                          <Text style={styles.paidNoteText}>
+                            Pago: {formatCentsToBRL(inst.paid_total_cents)}
+                            {inst.accrued_fine_cents +
+                              inst.accrued_interest_cents >
+                            0
+                              ? ` (inclui ${formatCentsToBRL(inst.accrued_fine_cents + inst.accrued_interest_cents)} de juros/multa)`
+                              : ''}
+                          </Text>
+                        ) : null}
+                        {isOpen &&
+                        lateCalc.suggestedFineCents +
+                          lateCalc.suggestedInterestCents >
+                          0 ? (
+                          <Text style={styles.lateSuggestionText}>
+                            Juros/multa sugeridos hoje: +{' '}
+                            {formatCentsToBRL(
+                              lateCalc.suggestedFineCents +
+                                lateCalc.suggestedInterestCents,
+                            )}
+                          </Text>
+                        ) : null}
+                      </View>
+
+                      <View style={styles.installmentRightCol}>
+                        <StatusBadge label={meta.label} tone={meta.tone} />
+                        <MoneyText
+                          cents={
+                            isOpen
+                              ? inst.remaining_principal_cents
+                              : inst.paid_total_cents || inst.principal_cents
+                          }
+                          size="sm"
+                          tone={
+                            meta.state === 'overdue'
+                              ? 'error'
+                              : meta.state === 'paid'
+                                ? 'primary'
+                                : 'default'
+                          }
+                        />
+                        {isOpen ? (
+                          <Pressable
+                            accessibilityRole="button"
+                            onPress={() => {
+                              setPaymentModalInstallments([inst]);
+                              setIsPaymentModalOpen(true);
+                            }}
+                            style={styles.receivePillButton}
+                          >
+                            <Ionicons
+                              name="cash-outline"
+                              size={14}
+                              color={colors.surface}
+                            />
+                            <Text style={styles.receivePillText}>Receber</Text>
+                          </Pressable>
+                        ) : null}
+                      </View>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
+            <Text style={styles.timestampNote}>
+              Nenhuma parcela registrada para esta venda.
+            </Text>
+          )}
+
+          {payments.length > 0 ? (
+            <View style={styles.paymentsHistoryBox}>
+              <Text style={styles.paymentsHistoryTitle}>
+                Histórico de recebimentos ({payments.length})
+              </Text>
+              {payments.map((pay) => (
+                <View key={pay.id} style={styles.paymentHistoryRow}>
+                  <View style={styles.itemLeftCol}>
+                    <Text style={styles.paymentMethodTitle}>
+                      {PAYMENT_METHOD_LABELS[pay.payment_method]} •{' '}
+                      {formatDateTimeBR(pay.paid_at)}
+                    </Text>
+                    {pay.fine_cents + pay.interest_cents > 0 ? (
+                      <Text style={styles.itemSubMeta}>
+                        Principal:{' '}
+                        {formatCentsToBRL(pay.principal_allocated_cents)} •
+                        Multa/Juros:{' '}
+                        {formatCentsToBRL(pay.fine_cents + pay.interest_cents)}
+                      </Text>
+                    ) : null}
+                    {pay.notes ? (
+                      <Text style={styles.itemSubMeta}>{pay.notes}</Text>
+                    ) : null}
+                  </View>
+                  <View style={styles.installmentRightCol}>
+                    {pay.is_reversed ? (
+                      <StatusBadge label="Estornado" tone="error" />
+                    ) : (
+                      <StatusBadge label="Recebido" tone="success" />
+                    )}
+                    <Text style={styles.summaryValue}>
+                      {formatCentsToBRL(pay.amount_cents)}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : null}
+        </View>
+      ) : null}
 
       {/* Resumo Financeiro e Ações */}
       <View style={styles.card}>
@@ -424,6 +741,180 @@ export default function SaleDetailScreen() {
         }}
         onCancel={() => setConfirmDraftModalOpen(false)}
       />
+
+      {workspaceId ? (
+        <ReceivePaymentModal
+          visible={isPaymentModalOpen}
+          workspaceId={workspaceId}
+          installments={paymentModalInstallments}
+          financeSettings={financeSettings}
+          onClose={() => setIsPaymentModalOpen(false)}
+          onSuccess={() => {
+            setIsPaymentModalOpen(false);
+            void loadSaleDetail();
+          }}
+        />
+      ) : null}
+
+      <Modal
+        visible={isCustomerModalOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          if (!isLinkingCustomer) {
+            setIsCustomerModalOpen(false);
+          }
+        }}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.customerPickerSheet}>
+            <View style={styles.customerPickerHeader}>
+              <View style={styles.customerPickerHeaderInfo}>
+                <Text style={styles.customerPickerTitle}>
+                  {sale.customer_id
+                    ? 'Trocar cliente da venda'
+                    : 'Vincular cliente à venda'}
+                </Text>
+                <Text style={styles.customerPickerSubtitle}>
+                  Vincule um cliente para que esta venda conste no histórico dele
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Fechar"
+                disabled={isLinkingCustomer}
+                onPress={() => setIsCustomerModalOpen(false)}
+                style={styles.closeBtn}
+              >
+                <Ionicons name="close" size={22} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+
+            <SearchField
+              value={customerSearch}
+              onChangeText={setCustomerSearch}
+              placeholder="Buscar cliente por nome ou telefone..."
+            />
+
+            {isLoadingCustomers ? (
+              <LoadingState message="Carregando clientes..." />
+            ) : (
+              <ScrollView
+                style={styles.customerListScroll}
+                keyboardShouldPersistTaps="handled"
+              >
+                {sale.customer_id ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={isLinkingCustomer}
+                    onPress={() => void handleSelectCustomer(null)}
+                    style={styles.unlinkItem}
+                  >
+                    <Ionicons
+                      name="close-circle-outline"
+                      size={22}
+                      color={colors.error}
+                    />
+                    <View style={styles.customerItemTextCol}>
+                      <Text style={styles.unlinkText}>
+                        Desvincular (Tornar venda avulsa)
+                      </Text>
+                      <Text style={styles.customerItemPhone}>
+                        Remover vínculo com o cliente atual
+                      </Text>
+                    </View>
+                  </Pressable>
+                ) : null}
+
+                {filteredCustomers.length === 0 ? (
+                  <View style={styles.noCustomersBox}>
+                    <Text style={styles.noCustomersText}>
+                      {customersList.length === 0
+                        ? 'Nenhum cliente cadastrado no momento.'
+                        : 'Nenhum cliente encontrado com este nome.'}
+                    </Text>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => {
+                        setIsCustomerModalOpen(false);
+                        router.push('/customers/new');
+                      }}
+                      style={styles.newCustomerLinkBtn}
+                    >
+                      <Ionicons
+                        name="person-add-outline"
+                        size={16}
+                        color={colors.primary}
+                      />
+                      <Text style={styles.newCustomerLinkText}>
+                        Cadastrar novo cliente
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : (
+                  filteredCustomers.map((cust) => {
+                    const isSelected = sale.customer_id === cust.id;
+                    return (
+                      <Pressable
+                        key={cust.id}
+                        accessibilityRole="button"
+                        disabled={isLinkingCustomer}
+                        onPress={() => void handleSelectCustomer(cust)}
+                        style={[
+                          styles.customerItem,
+                          isSelected ? styles.customerItemSelected : null,
+                        ]}
+                      >
+                        <View style={styles.customerAvatarSmall}>
+                          <Text style={styles.customerAvatarTextSmall}>
+                            {cust.full_name.slice(0, 2).toUpperCase()}
+                          </Text>
+                        </View>
+                        <View style={styles.customerItemTextCol}>
+                          <Text
+                            style={styles.customerItemName}
+                            numberOfLines={1}
+                          >
+                            {cust.full_name}
+                          </Text>
+                          <Text style={styles.customerItemPhone}>
+                            {cust.phone ?? 'Sem telefone'}
+                          </Text>
+                        </View>
+                        {isSelected ? (
+                          <Ionicons
+                            name="checkmark-circle"
+                            size={22}
+                            color={colors.primary}
+                          />
+                        ) : (
+                          <Ionicons
+                            name="chevron-forward"
+                            size={18}
+                            color={colors.textSecondary}
+                          />
+                        )}
+                      </Pressable>
+                    );
+                  })
+                )}
+              </ScrollView>
+            )}
+
+            <View style={styles.customerPickerFooter}>
+              <SecondaryButton
+                label="Cadastrar novo cliente"
+                iconName="person-add-outline"
+                disabled={isLinkingCustomer}
+                onPress={() => {
+                  setIsCustomerModalOpen(false);
+                  router.push('/customers/new');
+                }}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 }
@@ -492,6 +983,40 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.primaryDark,
   },
+  customerButtonsCol: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  changeCustomerButton: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  changeCustomerText: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  linkCustomerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  linkCustomerText: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: colors.primaryDark,
+  },
   timestampNote: {
     ...typography.caption,
     color: colors.textSecondary,
@@ -527,6 +1052,16 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.text,
   },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  sectionHeaderCol: {
+    flex: 1,
+    gap: 4,
+  },
   sectionTitle: {
     ...typography.section,
     color: colors.text,
@@ -549,6 +1084,76 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.md,
     gap: spacing.sm,
+  },
+  installmentRow: {
+    backgroundColor: colors.background,
+    borderRadius: radius.control,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: spacing.xs,
+  },
+  installmentTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  installmentRightCol: {
+    alignItems: 'flex-end',
+    gap: 6,
+  },
+  paidNoteText: {
+    ...typography.caption,
+    color: colors.primaryDark,
+    fontWeight: '600',
+  },
+  lateSuggestionText: {
+    ...typography.caption,
+    color: colors.error,
+    fontWeight: '600',
+  },
+  receivePillButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+  },
+  receivePillText: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: colors.surface,
+  },
+  paymentsHistoryBox: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: spacing.md,
+    gap: spacing.xs,
+  },
+  paymentsHistoryTitle: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  paymentHistoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.background,
+    borderRadius: radius.control,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.sm,
+    gap: spacing.sm,
+  },
+  paymentMethodTitle: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.text,
   },
   itemLeftCol: {
     flex: 1,
@@ -643,5 +1248,127 @@ const styles = StyleSheet.create({
   },
   cancelFormButtons: {
     gap: spacing.sm,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(17, 24, 39, 0.55)',
+    justifyContent: 'flex-end',
+  },
+  customerPickerSheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radius.cardLg,
+    borderTopRightRadius: radius.cardLg,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.xxl,
+    maxHeight: '85%',
+    gap: spacing.md,
+  },
+  customerPickerHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  customerPickerHeaderInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  customerPickerTitle: {
+    ...typography.section,
+    color: colors.text,
+  },
+  customerPickerSubtitle: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  closeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.pill,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  customerListScroll: {
+    maxHeight: 340,
+  },
+  customerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.control,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  customerItemSelected: {
+    backgroundColor: colors.primarySoft,
+  },
+  customerAvatarSmall: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  customerAvatarTextSmall: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: colors.primaryDark,
+  },
+  customerItemTextCol: {
+    flex: 1,
+    gap: 2,
+  },
+  customerItemName: {
+    ...typography.bodyStrong,
+    color: colors.text,
+  },
+  customerItemPhone: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  unlinkItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.control,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.errorSoft,
+    marginBottom: spacing.xs,
+  },
+  unlinkText: {
+    ...typography.bodyStrong,
+    color: colors.error,
+  },
+  noCustomersBox: {
+    paddingVertical: spacing.xl,
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  noCustomersText: {
+    ...typography.body,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  newCustomerLinkBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: spacing.xs,
+  },
+  newCustomerLinkText: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  customerPickerFooter: {
+    paddingTop: spacing.xs,
   },
 });

@@ -33,7 +33,7 @@ import {
   mapProductServiceError,
 } from '@/features/products/services';
 import type { CategoryRow } from '@/types/database';
-import { parseBRLInputToCents } from '@/utils/formatters';
+import { maskBRLCurrencyInput, parseBRLInputToCents } from '@/utils/formatters';
 
 export interface ProductFormSubmitPayload {
   values: ProductFormInput;
@@ -415,7 +415,7 @@ export function ProductForm({
         keyboardType="decimal-pad"
         leftIcon="cash-outline"
         value={priceInput}
-        onChangeText={setPriceInput}
+        onChangeText={(val) => setPriceInput(maskBRLCurrencyInput(val))}
         errorMessage={fieldErrors.priceInput}
         helperText="Salvo em centavos exatos no banco."
         editable={!isSubmitting}
@@ -427,7 +427,7 @@ export function ProductForm({
         keyboardType="decimal-pad"
         leftIcon="wallet-outline"
         value={costInput}
-        onChangeText={setCostInput}
+        onChangeText={(val) => setCostInput(maskBRLCurrencyInput(val))}
         errorMessage={fieldErrors.costInput}
         editable={!isSubmitting}
       />

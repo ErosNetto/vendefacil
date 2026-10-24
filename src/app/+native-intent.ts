@@ -1,21 +1,19 @@
 /**
- * No Android com React 19 (Fabric), o useLinking.native.js do expo-router
- * chama setLastUnhandledLink dentro de url.then() durante a renderização inicial
- * antes da montagem do NavigationContainer quando getInitialURL retorna uma string.
- * Como o roteamento inicial do VendeFácil é controlado pelo NavigationGuard
- * (sessão + workspace em src/app/_layout.tsx), retornar null no cold start
- * (initial = true) evita a chamada prematura de setLastUnhandledLink na linha 127
- * de useLinking.native.js e deixa o useThenable resolver dentro do useEffect.
+ * Garante que a resolução da URL inicial de deep linking no Android (Expo Router + React 19 Fabric)
+ * ocorra após o commit da montagem inicial do NavigationContainer, evitando o aviso:
+ * "Can't perform a React state update on a component that hasn't mounted yet".
  */
-export function redirectSystemPath({
+export async function redirectSystemPath({
   path,
   initial,
 }: {
   path: string;
   initial: boolean;
-}): string | null {
+}): Promise<string> {
   if (initial) {
-    return null;
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
+    });
   }
   return path;
 }

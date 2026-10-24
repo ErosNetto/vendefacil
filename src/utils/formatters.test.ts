@@ -4,6 +4,9 @@ import {
   distributeCentsAcrossInstallments,
   formatCentsToBRL,
   formatDateBR,
+  maskBRLCurrencyInput,
+  maskDateBR,
+  maskPhoneBR,
   parseBRLInputToCents,
 } from '@/utils/formatters';
 
@@ -58,3 +61,35 @@ describe('distributeCentsAcrossInstallments', () => {
     expect(() => distributeCentsAcrossInstallments(1000, 0)).toThrow();
   });
 });
+
+describe('maskPhoneBR', () => {
+  it('aplica máscara de celular e telefone fixo', () => {
+    expect(maskPhoneBR('')).toBe('');
+    expect(maskPhoneBR('11')).toBe('(11');
+    expect(maskPhoneBR('119999')).toBe('(11) 9999');
+    expect(maskPhoneBR('1199999')).toBe('(11) 9999-9');
+    expect(maskPhoneBR('1133334444')).toBe('(11) 3333-4444');
+    expect(maskPhoneBR('11988887777')).toBe('(11) 98888-7777');
+  });
+});
+
+describe('maskDateBR', () => {
+  it('aplica máscara de data DD/MM/YYYY progressivamente', () => {
+    expect(maskDateBR('')).toBe('');
+    expect(maskDateBR('18')).toBe('18');
+    expect(maskDateBR('1810')).toBe('18/10');
+    expect(maskDateBR('18102026')).toBe('18/10/2026');
+  });
+});
+
+describe('maskBRLCurrencyInput', () => {
+  it('formata valores de moeda conforme dígitos são digitados', () => {
+    expect(maskBRLCurrencyInput('')).toBe('');
+    expect(maskBRLCurrencyInput('0')).toBe('0,00');
+    expect(maskBRLCurrencyInput('5')).toBe('0,05');
+    expect(maskBRLCurrencyInput('50')).toBe('0,50');
+    expect(maskBRLCurrencyInput('500')).toBe('5,00');
+    expect(maskBRLCurrencyInput('150000')).toBe('1.500,00');
+  });
+});
+
