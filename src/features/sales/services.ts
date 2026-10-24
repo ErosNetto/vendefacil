@@ -56,6 +56,111 @@ export async function listWorkspaceSales(
   return (data ?? []) as SaleRow[];
 }
 
+export interface ListWorkspaceSalesPaginatedOptions {
+  workspaceId: string;
+  statusFilter?: SaleFilterKey;
+  search?: string;
+  customerId?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface PaginatedSalesResult {
+  items: SaleRow[];
+  totalCount: number;
+}
+
+export async function listWorkspaceSalesPaginated({
+  workspaceId,
+  statusFilter = 'all',
+  search,
+  customerId,
+  page = 1,
+  pageSize = 20,
+}: ListWorkspaceSalesPaginatedOptions): Promise<PaginatedSalesResult> {
+  ensureConfigured();
+
+  let query = supabase
+    .from('sales')
+    .select('*', { count: 'exact' })
+    .eq('workspace_id', workspaceId);
+
+  if (statusFilter && statusFilter !== 'all') {
+    query = query.eq('status', statusFilter);
+  }
+
+  if (customerId) {
+    query = query.eq('customer_id', customerId);
+  }
+
+  const trimmed = search?.trim();
+  if (trimmed) {
+    const s = `%${trimmed}%`;
+    query = query.or(`customer_name_snapshot.ilike.${s},notes.ilike.${s}`);
+  }
+
+  const offset = Math.max(0, (page - 1) * pageSize);
+  query = query
+    .order('created_at', { ascending: false })
+    .range(offset, offset + pageSize - 1);
+
+  const { data, count, error } = await query;
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return {
+    items: (data ?? []) as SaleRow[],
+    totalCount: count ?? (data?.length ?? 0),
+  };
+}
+
+export async function getWorkspaceSalesSummary(
+  workspaceId: string,
+): Promise<{
+  totalCount: number;
+  confirmedCount: number;
+  draftCount: number;
+  cancelledCount: number;
+  totalGrossCents: number;
+}> {
+  ensureConfigured();
+
+  const { data, error } = await supabase
+    .from('sales')
+    .select('id, status, total_cents')
+    .eq('workspace_id', workspaceId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  let confirmedCount = 0;
+  let draftCount = 0;
+  let cancelledCount = 0;
+  let totalGrossCents = 0;
+
+  for (const s of data ?? []) {
+    if (s.status === 'confirmed') {
+      confirmedCount += 1;
+      totalGrossCents += s.total_cents ?? 0;
+    } else if (s.status === 'draft') {
+      draftCount += 1;
+    } else if (s.status === 'cancelled') {
+      cancelledCount += 1;
+    }
+  }
+
+  return {
+    totalCount: (data ?? []).length,
+    confirmedCount,
+    draftCount,
+    cancelledCount,
+    totalGrossCents,
+  };
+}
+
 export interface SaleDetailResult {
   sale: SaleRow;
   items: SaleItemRow[];

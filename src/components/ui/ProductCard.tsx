@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { MoneyText, StatusBadge } from '@/components/ui/StatusBadge';
@@ -15,7 +15,7 @@ export interface ProductCardProps {
   onPress: () => void;
 }
 
-export function ProductCard({
+export const ProductCard = memo(function ProductCard({
   product,
   categoryName,
   onPress,
@@ -119,7 +119,7 @@ export function ProductCard({
       </View>
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

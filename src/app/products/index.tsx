@@ -1,29 +1,30 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { FlatList, Platform, RefreshControl, StyleSheet, View } from 'react-native';
 
 import {
   AppHeader,
   EmptyState,
   ErrorState,
   FilterChips,
+  ListCounterBanner,
+  ListFooterLoader,
   LoadingState,
   PrimaryButton,
   ProductCard,
   Screen,
   SearchField,
 } from '@/components/ui';
-import { spacing } from '@/constants/theme';
+import { colors, spacing } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
+import type { ProductStatusFilter } from '@/features/products/schemas';
 import {
-  filterProducts,
-  type ProductStatusFilter,
-} from '@/features/products/schemas';
-import {
+  getWorkspaceProductCounts,
   listWorkspaceCategories,
-  listWorkspaceProducts,
+  listWorkspaceProductsPaginated,
   mapProductServiceError,
 } from '@/features/products/services';
+import { useDebounce, usePaginatedList } from '@/hooks';
 import type { CategoryRow, ProductRow } from '@/types/database';
 
 export default function ProductsCatalogScreen() {
@@ -31,43 +32,81 @@ export default function ProductsCatalogScreen() {
   const { activeWorkspace } = useSession();
   const workspaceId = activeWorkspace?.workspace.id ?? null;
 
-  const [products, setProducts] = useState<ProductRow[]>([]);
   const [categories, setCategories] = useState<CategoryRow[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearch = useDebounce(searchQuery, 300);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
   const [statusFilter, setStatusFilter] =
     useState<ProductStatusFilter>('active');
-  const [isLoading, setIsLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const loadCatalog = useCallback(async () => {
-    if (!workspaceId) {
-      setProducts([]);
-      setCategories([]);
-      setIsLoading(false);
-      return;
-    }
+  const [counts, setCounts] = useState<{
+    active: number;
+    archived: number;
+    all: number;
+  }>({
+    active: 0,
+    archived: 0,
+    all: 0,
+  });
 
-    setIsLoading(true);
-    setErrorMessage(null);
+  const fetchPage = useCallback(
+    async ({ page, pageSize }: { page: number; pageSize: number }) => {
+      if (!workspaceId) {
+        return { items: [], totalCount: 0 };
+      }
+      return listWorkspaceProductsPaginated({
+        workspaceId,
+        search: debouncedSearch,
+        status: statusFilter,
+        categoryId: selectedCategoryId === 'all' ? undefined : selectedCategoryId,
+        page,
+        pageSize,
+      });
+    },
+    [workspaceId, debouncedSearch, statusFilter, selectedCategoryId],
+  );
+
+  const {
+    items: products,
+    totalCount,
+    displayedCount,
+    isLoading,
+    isLoadingMore,
+    isRefreshing,
+    hasMore,
+    errorMessage,
+    refresh,
+    loadMore,
+  } = usePaginatedList<ProductRow>({
+    fetchPage,
+    pageSize: 20,
+    dependencies: [
+      workspaceId,
+      debouncedSearch,
+      statusFilter,
+      selectedCategoryId,
+    ],
+    enabled: Boolean(workspaceId),
+  });
+
+  const loadAuxiliaryData = useCallback(async () => {
+    if (!workspaceId) return;
     try {
-      const [productRows, categoryRows] = await Promise.all([
-        listWorkspaceProducts(workspaceId),
+      const [categoryRows, summary] = await Promise.all([
         listWorkspaceCategories(workspaceId),
+        getWorkspaceProductCounts(workspaceId),
       ]);
-      setProducts(productRows);
       setCategories(categoryRows);
-    } catch (error) {
-      setErrorMessage(mapProductServiceError(error));
-    } finally {
-      setIsLoading(false);
+      setCounts(summary);
+    } catch {
+      // Falha não-crítica
     }
   }, [workspaceId]);
 
   useFocusEffect(
     useCallback(() => {
-      void loadCatalog();
-    }, [loadCatalog]),
+      void loadAuxiliaryData();
+    }, [loadAuxiliaryData]),
   );
 
   const categoryNameById = useMemo(
@@ -75,27 +114,14 @@ export default function ProductsCatalogScreen() {
     [categories],
   );
 
-  const statusCounts = useMemo(() => {
-    let active = 0;
-    let archived = 0;
-    for (const item of products) {
-      if (item.is_archived) {
-        archived += 1;
-      } else {
-        active += 1;
-      }
-    }
-    return { active, archived, all: products.length };
-  }, [products]);
-
   const statusOptions = useMemo(
     () =>
       [
-        { key: 'active', label: 'Ativos', count: statusCounts.active },
-        { key: 'archived', label: 'Arquivados', count: statusCounts.archived },
-        { key: 'all', label: 'Todos', count: statusCounts.all },
+        { key: 'active', label: 'Ativos', count: counts.active },
+        { key: 'archived', label: 'Arquivados', count: counts.archived },
+        { key: 'all', label: 'Todos', count: counts.all },
       ] as const,
-    [statusCounts.active, statusCounts.all, statusCounts.archived],
+    [counts.active, counts.all, counts.archived],
   );
 
   const categoryOptions = useMemo(
@@ -106,19 +132,35 @@ export default function ProductsCatalogScreen() {
     [categories],
   );
 
-  const filteredProducts = useMemo(
-    () =>
-      filterProducts(
-        products,
-        searchQuery,
-        selectedCategoryId,
-        statusFilter,
-      ),
-    [products, searchQuery, selectedCategoryId, statusFilter],
+  const isFiltered =
+    Boolean(debouncedSearch.trim()) ||
+    selectedCategoryId !== 'all' ||
+    statusFilter !== 'all';
+
+  const handlePressProduct = useCallback(
+    (productId: string) => {
+      router.push(`/products/${productId}`);
+    },
+    [router],
+  );
+
+  const keyExtractor = useCallback((item: ProductRow) => item.id, []);
+
+  const renderItem = useCallback(
+    ({ item }: { item: ProductRow }) => (
+      <ProductCard
+        product={item}
+        categoryName={
+          item.category_id ? categoryNameById.get(item.category_id) : null
+        }
+        onPress={() => handlePressProduct(item.id)}
+      />
+    ),
+    [categoryNameById, handlePressProduct],
   );
 
   return (
-    <Screen>
+    <Screen scroll={false}>
       <AppHeader
         title="Produtos"
         subtitle={activeWorkspace?.workspace.name ?? 'Catálogo'}
@@ -158,35 +200,35 @@ export default function ProductsCatalogScreen() {
       ) : errorMessage ? (
         <ErrorState
           title="Erro ao carregar produtos"
-          message={errorMessage}
+          message={mapProductServiceError(errorMessage)}
           onRetry={() => {
-            void loadCatalog();
+            void refresh();
           }}
         />
-      ) : filteredProducts.length === 0 ? (
+      ) : products.length === 0 ? (
         <EmptyState
           iconName="pricetag-outline"
           title={
-            searchQuery.trim() || selectedCategoryId !== 'all'
+            debouncedSearch.trim() || selectedCategoryId !== 'all'
               ? 'Nenhum produto encontrado para o filtro atual'
               : statusFilter === 'archived'
                 ? 'Nenhum produto arquivado'
                 : 'Seu catálogo de produtos está vazio'
           }
           description={
-            searchQuery.trim() || selectedCategoryId !== 'all'
+            debouncedSearch.trim() || selectedCategoryId !== 'all'
               ? 'Limpe a busca ou selecione "Todas categorias" para ver todos os itens.'
               : 'Cadastre seus produtos com fotos, preços e categorias para agilizar suas vendas.'
           }
           actionLabel={
-            searchQuery.trim() || selectedCategoryId !== 'all'
+            debouncedSearch.trim() || selectedCategoryId !== 'all'
               ? 'Limpar filtros'
               : statusFilter === 'active'
                 ? 'Cadastrar primeiro produto'
                 : undefined
           }
           onActionPress={
-            searchQuery.trim() || selectedCategoryId !== 'all'
+            debouncedSearch.trim() || selectedCategoryId !== 'all'
               ? () => {
                   setSearchQuery('');
                   setSelectedCategoryId('all');
@@ -197,27 +239,61 @@ export default function ProductsCatalogScreen() {
           }
         />
       ) : (
-        <View style={styles.listColumn}>
-          {filteredProducts.map((product) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              categoryName={
-                product.category_id
-                  ? categoryNameById.get(product.category_id)
-                  : null
-              }
-              onPress={() => router.push(`/products/${product.id}`)}
+        <FlatList
+          data={products}
+          keyExtractor={keyExtractor}
+          initialNumToRender={8}
+          maxToRenderPerBatch={8}
+          windowSize={5}
+          updateCellsBatchingPeriod={50}
+          removeClippedSubviews={Platform.OS === 'android'}
+          renderItem={renderItem}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ListHeaderComponent={
+            <ListCounterBanner
+              totalCount={totalCount}
+              displayedCount={displayedCount}
+              nounSingular="produto"
+              nounPlural="produtos"
+              isFiltered={isFiltered}
             />
-          ))}
-        </View>
+          }
+          ListFooterComponent={
+            <ListFooterLoader
+              isLoadingMore={isLoadingMore}
+              hasMore={hasMore}
+              itemCount={products.length}
+              nounSingular="produto"
+              nounPlural="produtos"
+              onPressLoadMore={loadMore}
+            />
+          }
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.4}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={() => {
+                void refresh();
+                void loadAuxiliaryData();
+              }}
+              colors={[colors.primary]}
+              tintColor={colors.primary}
+            />
+          }
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+        />
       )}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  listColumn: {
-    gap: spacing.md,
+  listContent: {
+    paddingBottom: spacing.xxl,
+  },
+  separator: {
+    height: spacing.md,
   },
 });

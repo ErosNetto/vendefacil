@@ -5,6 +5,7 @@ export * from './CustomerRow';
 export * from './DatePickerField';
 export * from './FeedbackStates';
 export * from './FormField';
+export * from './PaginationUI';
 export * from './ProductCard';
 export * from './Screen';
 export * from './SearchAndFilters';

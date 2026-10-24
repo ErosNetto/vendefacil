@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { FlatList, Platform, RefreshControl, StyleSheet, View } from 'react-native';
 
 import {
   AppHeader,
@@ -8,21 +8,22 @@ import {
   EmptyState,
   ErrorState,
   FilterChips,
+  ListCounterBanner,
+  ListFooterLoader,
   LoadingState,
   PrimaryButton,
   Screen,
   SearchField,
 } from '@/components/ui';
-import { spacing } from '@/constants/theme';
+import { colors, spacing } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
+import type { CustomerStatusFilter } from '@/features/customers/schemas';
 import {
-  filterCustomers,
-  type CustomerStatusFilter,
-} from '@/features/customers/schemas';
-import {
-  listWorkspaceCustomers,
+  getWorkspaceCustomerCounts,
+  listWorkspaceCustomersPaginated,
   mapCustomerServiceError,
 } from '@/features/customers/services';
+import { useDebounce, usePaginatedList } from '@/hooks';
 import type { CustomerRow as CustomerRecord } from '@/types/database';
 
 export default function CustomersListScreen() {
@@ -30,54 +31,70 @@ export default function CustomersListScreen() {
   const { activeWorkspace } = useSession();
   const workspaceId = activeWorkspace?.workspace.id ?? null;
 
-  const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearch = useDebounce(searchQuery, 300);
   const [statusFilter, setStatusFilter] =
     useState<CustomerStatusFilter>('active');
-  const [isLoading, setIsLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const loadCustomers = useCallback(async () => {
-    if (!workspaceId) {
-      setCustomers([]);
-      setIsLoading(false);
-      return;
-    }
+  const [counts, setCounts] = useState<{
+    active: number;
+    archived: number;
+    all: number;
+  }>({
+    active: 0,
+    archived: 0,
+    all: 0,
+  });
 
-    setIsLoading(true);
-    setErrorMessage(null);
+  const fetchPage = useCallback(
+    async ({ page, pageSize }: { page: number; pageSize: number }) => {
+      if (!workspaceId) {
+        return { items: [], totalCount: 0 };
+      }
+      return listWorkspaceCustomersPaginated({
+        workspaceId,
+        search: debouncedSearch,
+        status: statusFilter,
+        page,
+        pageSize,
+      });
+    },
+    [workspaceId, debouncedSearch, statusFilter],
+  );
+
+  const {
+    items: customers,
+    totalCount,
+    displayedCount,
+    isLoading,
+    isLoadingMore,
+    isRefreshing,
+    hasMore,
+    errorMessage,
+    refresh,
+    loadMore,
+  } = usePaginatedList<CustomerRecord>({
+    fetchPage,
+    pageSize: 20,
+    dependencies: [workspaceId, debouncedSearch, statusFilter],
+    enabled: Boolean(workspaceId),
+  });
+
+  // Atualiza contadores globais para os FilterChips
+  const loadCounts = useCallback(async () => {
+    if (!workspaceId) return;
     try {
-      const rows = await listWorkspaceCustomers(workspaceId);
-      setCustomers(rows);
-    } catch (error) {
-      setErrorMessage(mapCustomerServiceError(error));
-    } finally {
-      setIsLoading(false);
+      const summary = await getWorkspaceCustomerCounts(workspaceId);
+      setCounts(summary);
+    } catch {
+      // Falha silenciosa nos contadores não bloqueia a lista
     }
   }, [workspaceId]);
 
   useFocusEffect(
     useCallback(() => {
-      void loadCustomers();
-    }, [loadCustomers]),
-  );
-
-  const counts = useMemo(() => {
-    let active = 0;
-    let archived = 0;
-    for (const item of customers) {
-      if (item.is_archived) {
-        archived += 1;
-      } else {
-        active += 1;
-      }
-    }
-    return { active, archived, all: customers.length };
-  }, [customers]);
-
-  const filteredCustomers = useMemo(
-    () => filterCustomers(customers, searchQuery, statusFilter),
-    [customers, searchQuery, statusFilter],
+      void loadCounts();
+    }, [loadCounts]),
   );
 
   const filterOptions = useMemo(
@@ -90,8 +107,29 @@ export default function CustomersListScreen() {
     [counts.active, counts.all, counts.archived],
   );
 
+  const isFiltered = Boolean(debouncedSearch.trim()) || statusFilter !== 'all';
+
+  const handlePressCustomer = useCallback(
+    (customerId: string) => {
+      router.push(`/customers/${customerId}`);
+    },
+    [router],
+  );
+
+  const keyExtractor = useCallback((item: CustomerRecord) => item.id, []);
+
+  const renderItem = useCallback(
+    ({ item }: { item: CustomerRecord }) => (
+      <CustomerRow
+        customer={item}
+        onPress={() => handlePressCustomer(item.id)}
+      />
+    ),
+    [handlePressCustomer],
+  );
+
   return (
-    <Screen>
+    <Screen scroll={false}>
       <AppHeader
         title="Clientes"
         subtitle={activeWorkspace?.workspace.name ?? 'Carteira de clientes'}
@@ -123,37 +161,37 @@ export default function CustomersListScreen() {
       ) : errorMessage ? (
         <ErrorState
           title="Erro ao carregar clientes"
-          message={errorMessage}
+          message={mapCustomerServiceError(errorMessage)}
           onRetry={() => {
-            void loadCustomers();
+            void refresh();
           }}
         />
-      ) : filteredCustomers.length === 0 ? (
+      ) : customers.length === 0 ? (
         <EmptyState
           iconName="people-outline"
           title={
-            searchQuery.trim()
+            debouncedSearch.trim()
               ? 'Nenhum cliente encontrado para a busca'
               : statusFilter === 'archived'
                 ? 'Nenhum cliente arquivado'
                 : 'Sua carteira de clientes está vazia'
           }
           description={
-            searchQuery.trim()
+            debouncedSearch.trim()
               ? 'Tente outro termo de pesquisa ou altere o filtro de status acima.'
               : statusFilter === 'archived'
                 ? 'Clientes arquivados aparecem aqui com todo o histórico preservado.'
                 : 'Cadastre seus clientes para acompanhar compras, parcelas e recebimentos.'
           }
           actionLabel={
-            searchQuery.trim()
+            debouncedSearch.trim()
               ? 'Limpar busca'
               : statusFilter === 'active'
                 ? 'Cadastrar primeiro cliente'
                 : undefined
           }
           onActionPress={
-            searchQuery.trim()
+            debouncedSearch.trim()
               ? () => setSearchQuery('')
               : statusFilter === 'active'
                 ? () => router.push('/customers/new')
@@ -161,22 +199,61 @@ export default function CustomersListScreen() {
           }
         />
       ) : (
-        <View style={styles.listColumn}>
-          {filteredCustomers.map((customer) => (
-            <CustomerRow
-              key={customer.id}
-              customer={customer}
-              onPress={() => router.push(`/customers/${customer.id}`)}
+        <FlatList
+          data={customers}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ListHeaderComponent={
+            <ListCounterBanner
+              totalCount={totalCount}
+              displayedCount={displayedCount}
+              nounSingular="cliente"
+              nounPlural="clientes"
+              isFiltered={isFiltered}
             />
-          ))}
-        </View>
+          }
+          ListFooterComponent={
+            <ListFooterLoader
+              isLoadingMore={isLoadingMore}
+              hasMore={hasMore}
+              itemCount={customers.length}
+              nounSingular="cliente"
+              nounPlural="clientes"
+              onPressLoadMore={loadMore}
+            />
+          }
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.4}
+          initialNumToRender={8}
+          maxToRenderPerBatch={8}
+          windowSize={5}
+          updateCellsBatchingPeriod={50}
+          removeClippedSubviews={Platform.OS === 'android'}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={() => {
+                void refresh();
+                void loadCounts();
+              }}
+              colors={[colors.primary]}
+              tintColor={colors.primary}
+            />
+          }
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+        />
       )}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  listColumn: {
-    gap: spacing.md,
+  listContent: {
+    paddingBottom: spacing.xxl,
+  },
+  separator: {
+    height: spacing.md,
   },
 });

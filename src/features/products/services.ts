@@ -105,6 +105,99 @@ export async function listWorkspaceProducts(
   return data ?? [];
 }
 
+export interface ListWorkspaceProductsPaginatedOptions {
+  workspaceId: string;
+  search?: string;
+  status?: 'active' | 'archived' | 'all';
+  categoryId?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface PaginatedProductsResult {
+  items: ProductRow[];
+  totalCount: number;
+}
+
+export async function listWorkspaceProductsPaginated({
+  workspaceId,
+  search,
+  status = 'active',
+  categoryId,
+  page = 1,
+  pageSize = 20,
+}: ListWorkspaceProductsPaginatedOptions): Promise<PaginatedProductsResult> {
+  ensureConfigured();
+
+  let query = supabase
+    .from('products')
+    .select(
+      'id, workspace_id, category_id, name, brand, sku, barcode, cost_cents, price_cents, min_stock_qty, current_stock_qty, description, primary_image_path, is_archived, archived_at, created_by, created_at, updated_at',
+      { count: 'exact' },
+    )
+    .eq('workspace_id', workspaceId);
+
+  if (status === 'active') {
+    query = query.eq('is_archived', false);
+  } else if (status === 'archived') {
+    query = query.eq('is_archived', true);
+  }
+
+  if (categoryId && categoryId !== 'all') {
+    query = query.eq('category_id', categoryId);
+  }
+
+  const trimmed = search?.trim();
+  if (trimmed) {
+    const s = `%${trimmed}%`;
+    query = query.or(`name.ilike.${s},sku.ilike.${s},brand.ilike.${s},barcode.ilike.${s}`);
+  }
+
+  const offset = Math.max(0, (page - 1) * pageSize);
+  query = query
+    .order('name', { ascending: true })
+    .range(offset, offset + pageSize - 1);
+
+  const { data, count, error } = await query;
+
+  if (error) {
+    throw error;
+  }
+
+  return {
+    items: data ?? [],
+    totalCount: count ?? (data?.length ?? 0),
+  };
+}
+
+export async function getWorkspaceProductCounts(
+  workspaceId: string,
+): Promise<{ active: number; archived: number; all: number }> {
+  ensureConfigured();
+
+  const [activeRes, archivedRes] = await Promise.all([
+    supabase
+      .from('products')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', workspaceId)
+      .eq('is_archived', false),
+    supabase
+      .from('products')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', workspaceId)
+      .eq('is_archived', true),
+  ]);
+
+  const active = activeRes.count ?? 0;
+  const archived = archivedRes.count ?? 0;
+
+  return {
+    active,
+    archived,
+    all: active + archived,
+  };
+}
+
 export async function getWorkspaceProductById(
   workspaceId: string,
   productId: string,

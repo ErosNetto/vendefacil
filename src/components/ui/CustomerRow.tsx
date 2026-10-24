@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -11,7 +12,10 @@ export interface CustomerRowProps {
   onPress: () => void;
 }
 
-export function CustomerRow({ customer, onPress }: CustomerRowProps) {
+export const CustomerRow = memo(function CustomerRow({
+  customer,
+  onPress,
+}: CustomerRowProps) {
   const initials = getCustomerInitials(customer.full_name);
   const secondaryLine =
     customer.phone || customer.email || 'Sem telefone ou e-mail informado';
@@ -64,7 +68,7 @@ export function CustomerRow({ customer, onPress }: CustomerRowProps) {
       </View>
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

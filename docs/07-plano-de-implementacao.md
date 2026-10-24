@@ -53,6 +53,7 @@
 - [x] Testes de arredondamento e atraso (`src/features/finance/schemas.test.ts` e `supabase/tests/phase6_finance_rls_and_rpc_test.sql`).
 - [x] Vincular cliente a venda avulsa e atualizar parcelas (`supabase/migrations/20261024000007_link_sale_customer.sql`, `supabase/tests/link_sale_customer_test.sql`, `src/features/sales/services.ts`, `src/app/sales/[id]/index.tsx`).
 - [x] Máscaras BRL, máscara de data e seletor `DatePickerField` (`src/utils/formatters.ts`, `src/components/ui/DatePickerField.tsx`, `src/features/products/ProductForm.tsx`, `src/app/sales/new.tsx`).
+- [x] Padronização de paginação e performance de listas (`usePaginatedList`, `useDebounce`, `ListFooterLoader`, `ListCounterBanner`, memoização de cards e ajuste de batch/window para Android em Clientes, Catálogo, Vendas, Estoque e Financeiro).
 
 > **Nota de validação da Fase 6 e Complementos:** Execute `supabase/migrations/20261018000006_phase6_finance.sql` e `supabase/migrations/20261024000007_link_sale_customer.sql` no SQL Editor do Supabase. Validações automatizadas disponíveis em `supabase/tests/phase6_finance_rls_and_rpc_test.sql` e `supabase/tests/link_sale_customer_test.sql`.
 

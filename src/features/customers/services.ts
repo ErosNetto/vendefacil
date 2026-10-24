@@ -54,6 +54,93 @@ export async function listWorkspaceCustomers(
   return data ?? [];
 }
 
+export interface ListWorkspaceCustomersPaginatedOptions {
+  workspaceId: string;
+  search?: string;
+  status?: 'active' | 'archived' | 'all';
+  page?: number;
+  pageSize?: number;
+}
+
+export interface PaginatedCustomersResult {
+  items: CustomerRow[];
+  totalCount: number;
+}
+
+export async function listWorkspaceCustomersPaginated({
+  workspaceId,
+  search,
+  status = 'active',
+  page = 1,
+  pageSize = 20,
+}: ListWorkspaceCustomersPaginatedOptions): Promise<PaginatedCustomersResult> {
+  ensureConfigured();
+
+  let query = supabase
+    .from('customers')
+    .select(
+      'id, workspace_id, full_name, phone, email, address, notes, is_archived, archived_at, created_by, created_at, updated_at',
+      { count: 'exact' },
+    )
+    .eq('workspace_id', workspaceId);
+
+  if (status === 'active') {
+    query = query.eq('is_archived', false);
+  } else if (status === 'archived') {
+    query = query.eq('is_archived', true);
+  }
+
+  const trimmed = search?.trim();
+  if (trimmed) {
+    const s = `%${trimmed}%`;
+    query = query.or(`full_name.ilike.${s},phone.ilike.${s},email.ilike.${s}`);
+  }
+
+  const offset = Math.max(0, (page - 1) * pageSize);
+  query = query
+    .order('full_name', { ascending: true })
+    .range(offset, offset + pageSize - 1);
+
+  const { data, count, error } = await query;
+
+  if (error) {
+    throw error;
+  }
+
+  return {
+    items: data ?? [],
+    totalCount: count ?? (data?.length ?? 0),
+  };
+}
+
+export async function getWorkspaceCustomerCounts(
+  workspaceId: string,
+): Promise<{ active: number; archived: number; all: number }> {
+  ensureConfigured();
+
+  const [activeRes, archivedRes] = await Promise.all([
+    supabase
+      .from('customers')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', workspaceId)
+      .eq('is_archived', false),
+    supabase
+      .from('customers')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', workspaceId)
+      .eq('is_archived', true),
+  ]);
+
+  const active = activeRes.count ?? 0;
+  const archived = archivedRes.count ?? 0;
+
+  return {
+    active,
+    archived,
+    all: active + archived,
+  };
+}
+
 export async function getWorkspaceCustomerById(
   workspaceId: string,
   customerId: string,

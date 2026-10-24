@@ -63,6 +63,91 @@ export async function listWorkspaceInstallments(
   return (data ?? []) as InstallmentRow[];
 }
 
+export interface ListWorkspaceInstallmentsPaginatedOptions {
+  workspaceId: string;
+  filterMode?: ReceivableFilterKey;
+  search?: string;
+  customerId?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface PaginatedInstallmentsResult {
+  items: InstallmentRow[];
+  totalCount: number;
+}
+
+export async function listWorkspaceInstallmentsPaginated({
+  workspaceId,
+  filterMode = 'all_open',
+  search,
+  customerId,
+  page = 1,
+  pageSize = 20,
+}: ListWorkspaceInstallmentsPaginatedOptions): Promise<PaginatedInstallmentsResult> {
+  ensureConfigured();
+
+  const today = getTodayISODate();
+
+  let query = supabase
+    .from('installments')
+    .select('*', { count: 'exact' })
+    .eq('workspace_id', workspaceId);
+
+  if (customerId) {
+    query = query.eq('customer_id', customerId);
+  }
+
+  if (filterMode === 'all_open') {
+    query = query.neq('status', 'paid').neq('status', 'cancelled');
+  } else if (filterMode === 'paid') {
+    query = query.eq('status', 'paid');
+  } else if (filterMode === 'overdue') {
+    query = query
+      .neq('status', 'paid')
+      .neq('status', 'cancelled')
+      .lt('due_date', today);
+  } else if (filterMode === 'due_today') {
+    query = query
+      .neq('status', 'paid')
+      .neq('status', 'cancelled')
+      .eq('due_date', today);
+  } else if (filterMode === 'upcoming') {
+    query = query
+      .neq('status', 'paid')
+      .neq('status', 'cancelled')
+      .gt('due_date', today);
+  }
+
+  const trimmed = search?.trim();
+  if (trimmed) {
+    const s = `%${trimmed}%`;
+    query = query.or(`customer_name_snapshot.ilike.${s},notes.ilike.${s}`);
+  }
+
+  const offset = Math.max(0, (page - 1) * pageSize);
+  if (filterMode === 'paid') {
+    query = query.order('paid_at', { ascending: false, nullsFirst: false });
+  } else {
+    query = query
+      .order('due_date', { ascending: true })
+      .order('installment_number', { ascending: true });
+  }
+
+  query = query.range(offset, offset + pageSize - 1);
+
+  const { data, count, error } = await query;
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return {
+    items: (data ?? []) as InstallmentRow[],
+    totalCount: count ?? (data?.length ?? 0),
+  };
+}
+
 export async function listWorkspacePayments(
   workspaceId: string,
   options?: {
