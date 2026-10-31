@@ -1,7 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import {
   AppHeader,
@@ -36,6 +44,7 @@ import {
   parseDiscountBRLInput,
   type SaleCartItem,
   updateCartItemQuantity,
+  updateCartItemUnitPrice,
   validateSaleSubmission,
 } from '@/features/sales/schemas';
 import {
@@ -82,6 +91,13 @@ export default function NewSaleScreen() {
   const [customerSearch, setCustomerSearch] = useState('');
 
   const [cart, setCart] = useState<SaleCartItem[]>([]);
+  const [editingPriceProductId, setEditingPriceProductId] = useState<
+    string | null
+  >(null);
+  const [editingPriceInput, setEditingPriceInput] = useState('');
+  const [editingPriceError, setEditingPriceError] = useState<string | null>(
+    null,
+  );
   const [isAddingProduct, setIsAddingProduct] = useState(
     !params.productId && !params.draftSaleId,
   );
@@ -189,6 +205,10 @@ export default function NewSaleScreen() {
               sku: catalogProduct?.sku ?? item.sku_snapshot,
               primaryImagePath: catalogProduct?.primary_image_path ?? null,
               unitPriceCents:
+                item.unit_price_cents > 0
+                  ? item.unit_price_cents
+                  : (catalogProduct?.price_cents ?? item.unit_price_cents),
+              catalogPriceCents:
                 catalogProduct?.price_cents ?? item.unit_price_cents,
               unitCostCents: catalogProduct?.cost_cents ?? item.unit_cost_cents,
               availableStockQty: Number(
@@ -256,6 +276,53 @@ export default function NewSaleScreen() {
     () => customers.find((c) => c.id === selectedCustomerId) ?? null,
     [customers, selectedCustomerId],
   );
+
+  const editingPriceItem = useMemo(
+    () => cart.find((c) => c.productId === editingPriceProductId) ?? null,
+    [cart, editingPriceProductId],
+  );
+
+  function handleOpenEditPriceModal(item: SaleCartItem): void {
+    setEditingPriceProductId(item.productId);
+    setEditingPriceInput(maskBRLCurrencyInput(String(item.unitPriceCents)));
+    setEditingPriceError(null);
+  }
+
+  function handleCloseEditPriceModal(): void {
+    setEditingPriceProductId(null);
+    setEditingPriceError(null);
+  }
+
+  function handleApplyCustomPrice(): void {
+    if (!editingPriceItem) {
+      return;
+    }
+    const parsed = parseBRLInputToCents(editingPriceInput);
+    if (parsed === null || parsed <= 0) {
+      setEditingPriceError('Informe um preço unitário válido maior que zero.');
+      return;
+    }
+    setCart((prev) =>
+      updateCartItemUnitPrice(prev, editingPriceItem.productId, parsed),
+    );
+    setEditingPriceProductId(null);
+    setEditingPriceError(null);
+    setSubmitError(null);
+  }
+
+  function handleRestoreCatalogPrice(): void {
+    if (!editingPriceItem) {
+      return;
+    }
+    const catalogPrice =
+      editingPriceItem.catalogPriceCents ?? editingPriceItem.unitPriceCents;
+    setCart((prev) =>
+      updateCartItemUnitPrice(prev, editingPriceItem.productId, catalogPrice),
+    );
+    setEditingPriceProductId(null);
+    setEditingPriceError(null);
+    setSubmitError(null);
+  }
 
   const filteredCustomers = useMemo(() => {
     const q = customerSearch.trim().toLowerCase();
@@ -583,6 +650,9 @@ export default function NewSaleScreen() {
                 item.quantity * item.unitPriceCents,
               );
               const isOverflow = item.quantity > item.availableStockQty;
+              const catalogPrice =
+                item.catalogPriceCents ?? item.unitPriceCents;
+              const isCustomPrice = item.unitPriceCents !== catalogPrice;
 
               return (
                 <View
@@ -601,6 +671,12 @@ export default function NewSaleScreen() {
                         {formatCentsToBRL(item.unitPriceCents)} / un. • Disp.:{' '}
                         {item.availableStockQty} un.
                       </Text>
+                      {isCustomPrice ? (
+                        <Text style={styles.customPriceNoticeText}>
+                          Preço negociado nesta venda (Tabela:{' '}
+                          {formatCentsToBRL(catalogPrice)})
+                        </Text>
+                      ) : null}
                     </View>
                     <MoneyText
                       cents={lineTotalCents}
@@ -610,16 +686,35 @@ export default function NewSaleScreen() {
                   </View>
 
                   <View style={styles.cartItemControlsRow}>
-                    {isOverflow ? (
-                      <StatusBadge
-                        label={`Acima do estoque (${item.availableStockQty} disp.)`}
-                        tone="error"
-                      />
-                    ) : (
-                      <Text style={styles.cartItemSubText}>
-                        Subtotal do item
-                      </Text>
-                    )}
+                    <View style={styles.cartItemLeftActions}>
+                      {isOverflow ? (
+                        <StatusBadge
+                          label={`Acima do estoque (${item.availableStockQty} disp.)`}
+                          tone="error"
+                        />
+                      ) : null}
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => handleOpenEditPriceModal(item)}
+                        style={[
+                          styles.editUnitPricePill,
+                          isCustomPrice
+                            ? styles.editUnitPricePillActive
+                            : null,
+                        ]}
+                      >
+                        <Ionicons
+                          name="pricetag-outline"
+                          size={13}
+                          color={colors.primaryDark}
+                        />
+                        <Text style={styles.editUnitPricePillText}>
+                          {isCustomPrice
+                            ? 'Ajustar preço'
+                            : 'Editar preço un.'}
+                        </Text>
+                      </Pressable>
+                    </View>
 
                     <View style={styles.stepperRow}>
                       <Pressable
@@ -1039,6 +1134,174 @@ export default function NewSaleScreen() {
           />
         </View>
       </View>
+
+      <Modal
+        visible={editingPriceItem !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCloseEditPriceModal}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalBackdrop}
+        >
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeaderRow}>
+              <View style={styles.modalTitleRow}>
+                <View style={styles.modalIconCircle}>
+                  <Ionicons
+                    name="pricetag-outline"
+                    size={20}
+                    color={colors.primaryDark}
+                  />
+                </View>
+                <View style={styles.modalTitleCol}>
+                  <Text style={styles.modalTitle}>
+                    Preço unitário nesta venda
+                  </Text>
+                  <Text style={styles.modalSubtitle} numberOfLines={1}>
+                    {editingPriceItem?.productName ?? ''}
+                  </Text>
+                </View>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Fechar"
+                onPress={handleCloseEditPriceModal}
+                style={styles.modalCloseBtn}
+              >
+                <Ionicons
+                  name="close"
+                  size={20}
+                  color={colors.textSecondary}
+                />
+              </Pressable>
+            </View>
+
+            {editingPriceItem ? (
+              <>
+                <View style={styles.modalMetaRow}>
+                  <Text style={styles.modalMetaText}>
+                    Tabela:{' '}
+                    <Text style={styles.modalMetaStrong}>
+                      {formatCentsToBRL(
+                        editingPriceItem.catalogPriceCents ??
+                          editingPriceItem.unitPriceCents,
+                      )}
+                    </Text>
+                  </Text>
+                  <Text style={styles.modalMetaDot}>•</Text>
+                  <Text style={styles.modalMetaText}>
+                    Custo:{' '}
+                    <Text style={styles.modalMetaStrong}>
+                      {formatCentsToBRL(editingPriceItem.unitCostCents)}
+                    </Text>
+                  </Text>
+                  <Text style={styles.modalMetaDot}>•</Text>
+                  <Text style={styles.modalMetaText}>
+                    Qtd.:{' '}
+                    <Text style={styles.modalMetaStrong}>
+                      {editingPriceItem.quantity} un.
+                    </Text>
+                  </Text>
+                </View>
+
+                <FormField
+                  label="Novo preço unitário (R$) *"
+                  placeholder="0,00"
+                  keyboardType="numeric"
+                  autoFocus
+                  value={editingPriceInput}
+                  errorMessage={editingPriceError ?? undefined}
+                  helperText="Altera apenas nesta venda. O preço do catálogo permanece intacto."
+                  onChangeText={(val) => {
+                    setEditingPriceInput(maskBRLCurrencyInput(val));
+                    setEditingPriceError(null);
+                  }}
+                />
+
+                {(() => {
+                  const previewUnitCents =
+                    parseBRLInputToCents(editingPriceInput) ?? 0;
+                  const previewSubtotalCents = Math.round(
+                    editingPriceItem.quantity * previewUnitCents,
+                  );
+                  const previewProfitCents =
+                    previewUnitCents - editingPriceItem.unitCostCents;
+                  return (
+                    <View style={styles.modalPreviewBox}>
+                      <View style={styles.modalPreviewRow}>
+                        <Text style={styles.modalPreviewLabel}>
+                          Subtotal do item ({editingPriceItem.quantity} un.)
+                        </Text>
+                        <Text style={styles.modalPreviewValue}>
+                          {formatCentsToBRL(previewSubtotalCents)}
+                        </Text>
+                      </View>
+                      <View style={styles.modalPreviewRow}>
+                        <Text style={styles.modalPreviewLabel}>
+                          Lucro unitário estimado
+                        </Text>
+                        <Text
+                          style={[
+                            styles.modalPreviewValue,
+                            {
+                              color:
+                                previewProfitCents >= 0
+                                  ? colors.success
+                                  : colors.error,
+                            },
+                          ]}
+                        >
+                          {formatCentsToBRL(previewProfitCents)}
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                })()}
+
+                <View style={styles.modalActionsCol}>
+                  <PrimaryButton
+                    label="Aplicar preço na venda"
+                    iconName="checkmark-circle-outline"
+                    onPress={handleApplyCustomPrice}
+                  />
+                  {editingPriceItem.unitPriceCents !==
+                    (editingPriceItem.catalogPriceCents ??
+                      editingPriceItem.unitPriceCents) ||
+                  (parseBRLInputToCents(editingPriceInput) ?? 0) !==
+                    (editingPriceItem.catalogPriceCents ??
+                      editingPriceItem.unitPriceCents) ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={handleRestoreCatalogPrice}
+                      style={styles.modalResetPriceBtn}
+                    >
+                      <Ionicons
+                        name="refresh-outline"
+                        size={16}
+                        color={colors.primaryDark}
+                      />
+                      <Text style={styles.modalResetPriceBtnText}>
+                        Restaurar preço de tabela (
+                        {formatCentsToBRL(
+                          editingPriceItem.catalogPriceCents ??
+                            editingPriceItem.unitPriceCents,
+                        )}
+                        )
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  <SecondaryButton
+                    label="Cancelar"
+                    onPress={handleCloseEditPriceModal}
+                  />
+                </View>
+              </>
+            ) : null}
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </Screen>
   );
 }
@@ -1209,11 +1472,168 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.textSecondary,
   },
+  customPriceNoticeText: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.primaryDark,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(23, 33, 29, 0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: colors.surface,
+    borderRadius: radius.cardLg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.xl,
+    gap: spacing.md,
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  modalTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    flex: 1,
+  },
+  modalIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  modalTitleCol: {
+    flex: 1,
+    gap: 2,
+  },
+  modalTitle: {
+    ...typography.bodyStrong,
+    color: colors.text,
+  },
+  modalSubtitle: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  modalCloseBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.pill,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    backgroundColor: colors.background,
+    borderRadius: radius.control,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  modalMetaText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  modalMetaStrong: {
+    fontWeight: '700',
+    color: colors.text,
+  },
+  modalMetaDot: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  modalPreviewBox: {
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.control,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    padding: spacing.md,
+    gap: 4,
+  },
+  modalPreviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  modalPreviewLabel: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  modalPreviewValue: {
+    ...typography.bodyStrong,
+    color: colors.primaryDark,
+  },
+  modalActionsCol: {
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  modalResetPriceBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
+  },
+  modalResetPriceBtnText: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: colors.primaryDark,
+  },
   cartItemControlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing.sm,
+  },
+  cartItemLeftActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    flex: 1,
+  },
+  editUnitPricePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  editUnitPricePillActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
+  },
+  editUnitPricePillText: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.primaryDark,
   },
   cartItemSubText: {
     ...typography.caption,

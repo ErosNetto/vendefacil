@@ -20,6 +20,7 @@ import { colors, radius, spacing, typography } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
 import {
   calculateStockPreview,
+  calculateWeightedAverageCostCents,
   createStockIdempotencyKey,
   MANUAL_STOCK_MOVEMENT_TYPES,
   type ManualStockMovementType,
@@ -38,6 +39,11 @@ import {
   mapProductServiceError,
 } from '@/features/products/services';
 import type { ProductRow } from '@/types/database';
+import {
+  formatCentsToBRL,
+  maskBRLCurrencyInput,
+  parseBRLInputToCents,
+} from '@/utils/formatters';
 
 export default function InventoryAdjustScreen() {
   const router = useRouter();
@@ -75,11 +81,18 @@ export default function InventoryAdjustScreen() {
     useState<ManualStockMovementType>(initialMovementType);
   const [quantityInput, setQuantityInput] = useState('');
   const [reason, setReason] = useState('');
+  const [unitCostInput, setUnitCostInput] = useState('');
+  const [unitPriceInput, setUnitPriceInput] = useState('');
+  const [batchTypedCostCents, setBatchTypedCostCents] = useState<number | null>(
+    null,
+  );
 
   const [fieldErrors, setFieldErrors] = useState<{
     productId?: string;
     quantityInput?: string;
     reason?: string;
+    unitCostInput?: string;
+    unitPriceInput?: string;
   }>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -125,12 +138,34 @@ export default function InventoryAdjustScreen() {
     idempotencyKeyRef.current = createStockIdempotencyKey(
       selectedProductId || 'prod',
     );
-  }, [selectedProductId, movementType, quantityInput, reason]);
+  }, [
+    selectedProductId,
+    movementType,
+    quantityInput,
+    reason,
+    unitCostInput,
+    unitPriceInput,
+  ]);
 
   const selectedProduct = useMemo(
     () => products.find((p) => p.id === selectedProductId) ?? null,
     [products, selectedProductId],
   );
+
+  useEffect(() => {
+    if (!selectedProduct) {
+      setUnitCostInput('');
+      setUnitPriceInput('');
+      setBatchTypedCostCents(null);
+      return;
+    }
+
+    const currentCost = selectedProduct.cost_cents ?? 0;
+    const currentPrice = selectedProduct.price_cents ?? 0;
+    setUnitCostInput(maskBRLCurrencyInput(String(currentCost)));
+    setUnitPriceInput(maskBRLCurrencyInput(String(currentPrice)));
+    setBatchTypedCostCents(currentCost);
+  }, [selectedProduct]);
 
   useEffect(() => {
     let active = true;
@@ -176,6 +211,48 @@ export default function InventoryAdjustScreen() {
   );
   const movementMeta = STOCK_MOVEMENT_META[movementType];
 
+  const currentCatalogCostCents = selectedProduct?.cost_cents ?? 0;
+  const currentCatalogPriceCents = selectedProduct?.price_cents ?? 0;
+  const parsedUnitCostCents =
+    parseBRLInputToCents(unitCostInput) ?? currentCatalogCostCents;
+  const parsedUnitPriceCents =
+    parseBRLInputToCents(unitPriceInput) ?? currentCatalogPriceCents;
+
+  const effectiveBatchCostCents = batchTypedCostCents ?? parsedUnitCostCents;
+  const weightedAverageCostCents = useMemo(() => {
+    if (!selectedProduct || movementType !== 'entry' || parsedQty <= 0) {
+      return null;
+    }
+    if (
+      currentStockQty <= 0 ||
+      effectiveBatchCostCents === currentCatalogCostCents
+    ) {
+      return null;
+    }
+    return calculateWeightedAverageCostCents({
+      currentStockQty,
+      currentCostCents: currentCatalogCostCents,
+      entryQuantity: parsedQty,
+      entryCostCents: effectiveBatchCostCents,
+    });
+  }, [
+    currentCatalogCostCents,
+    currentStockQty,
+    effectiveBatchCostCents,
+    movementType,
+    parsedQty,
+    selectedProduct,
+  ]);
+
+  const batchTotalInvestmentCents = Math.round(
+    parsedQty * Math.max(0, effectiveBatchCostCents),
+  );
+  const unitProfitCents = parsedUnitPriceCents - parsedUnitCostCents;
+  const marginPercent =
+    parsedUnitPriceCents > 0
+      ? Math.round((unitProfitCents / parsedUnitPriceCents) * 100)
+      : 0;
+
   async function handleSubmit(): Promise<void> {
     if (!workspaceId || isSubmitting) {
       return;
@@ -190,6 +267,8 @@ export default function InventoryAdjustScreen() {
       quantityInput,
       reason,
       currentStockQty,
+      unitCostInput: movementType === 'entry' ? unitCostInput : '',
+      unitPriceInput: movementType === 'entry' ? unitPriceInput : '',
     });
 
     if (!parsed.success) {
@@ -197,13 +276,17 @@ export default function InventoryAdjustScreen() {
         productId?: string;
         quantityInput?: string;
         reason?: string;
+        unitCostInput?: string;
+        unitPriceInput?: string;
       } = {};
       for (const issue of parsed.error.issues) {
         const key = issue.path[0];
         if (
           (key === 'productId' ||
             key === 'quantityInput' ||
-            key === 'reason') &&
+            key === 'reason' ||
+            key === 'unitCostInput' ||
+            key === 'unitPriceInput') &&
           !nextErrors[key]
         ) {
           nextErrors[key] = issue.message;
@@ -223,6 +306,8 @@ export default function InventoryAdjustScreen() {
         quantity: normalized.quantity,
         reason: normalized.reason,
         idempotencyKey: idempotencyKeyRef.current,
+        unitCostCents: normalized.unitCostCents,
+        unitPriceCents: normalized.unitPriceCents,
       });
 
       if (router.canGoBack()) {
@@ -311,6 +396,10 @@ export default function InventoryAdjustScreen() {
               <Text style={styles.selectedProductMeta}>
                 Saldo atual: {currentStockQty} un. • Mínimo:{' '}
                 {Number(selectedProduct.min_stock_qty ?? 0)} un.
+              </Text>
+              <Text style={styles.selectedProductPricingMeta}>
+                Custo atual: {formatCentsToBRL(currentCatalogCostCents)} •
+                Venda atual: {formatCentsToBRL(currentCatalogPriceCents)}
               </Text>
             </View>
             <Pressable
@@ -441,6 +530,160 @@ export default function InventoryAdjustScreen() {
           }}
           errorMessage={fieldErrors.quantityInput}
         />
+
+        {movementType === 'entry' && selectedProduct ? (
+          <View style={styles.batchPricingCard}>
+            <View style={styles.batchPricingHeader}>
+              <Ionicons
+                name="cash-outline"
+                size={18}
+                color={colors.primaryDark}
+              />
+              <View style={styles.batchPricingHeaderTextWrap}>
+                <Text style={styles.batchPricingTitle}>
+                  Valores desta remessa (Custo e Venda)
+                </Text>
+                <Text style={styles.batchPricingSubtitle}>
+                  Atualiza o catálogo para as próximas vendas sem alterar o
+                  histórico das vendas passadas.
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.batchPricingInputsRow}>
+              <View style={styles.batchPricingInputCol}>
+                <FormField
+                  label="Custo pago / un. (R$)"
+                  placeholder="0,00"
+                  keyboardType="numeric"
+                  value={unitCostInput}
+                  onChangeText={(val) => {
+                    const masked = maskBRLCurrencyInput(val);
+                    setUnitCostInput(masked);
+                    setBatchTypedCostCents(parseBRLInputToCents(masked));
+                    setFieldErrors((prev) => ({
+                      ...prev,
+                      unitCostInput: undefined,
+                    }));
+                  }}
+                  errorMessage={fieldErrors.unitCostInput}
+                />
+              </View>
+
+              <View style={styles.batchPricingInputCol}>
+                <FormField
+                  label="Novo preço venda (R$)"
+                  placeholder="0,00"
+                  keyboardType="numeric"
+                  value={unitPriceInput}
+                  onChangeText={(val) => {
+                    const masked = maskBRLCurrencyInput(val);
+                    setUnitPriceInput(masked);
+                    setFieldErrors((prev) => ({
+                      ...prev,
+                      unitPriceInput: undefined,
+                    }));
+                  }}
+                  errorMessage={fieldErrors.unitPriceInput}
+                />
+              </View>
+            </View>
+
+            {weightedAverageCostCents !== null ? (
+              parsedUnitCostCents !== weightedAverageCostCents ? (
+                <View style={styles.weightedAvgBanner}>
+                  <View style={styles.weightedAvgTextCol}>
+                    <Text style={styles.weightedAvgTitle}>
+                      💡 Sugestão de custo médio ponderado
+                    </Text>
+                    <Text style={styles.weightedAvgDescription}>
+                      Estoque anterior: {currentStockQty} un. a{' '}
+                      {formatCentsToBRL(currentCatalogCostCents)} + Novo lote:{' '}
+                      {parsedQty} un. a{' '}
+                      {formatCentsToBRL(effectiveBatchCostCents)} ={' '}
+                      <Text style={styles.weightedAvgHighlight}>
+                        {formatCentsToBRL(weightedAverageCostCents)}/un.
+                      </Text>
+                    </Text>
+                  </View>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => {
+                      setUnitCostInput(
+                        maskBRLCurrencyInput(String(weightedAverageCostCents)),
+                      );
+                      setFieldErrors((prev) => ({
+                        ...prev,
+                        unitCostInput: undefined,
+                      }));
+                    }}
+                    style={styles.weightedAvgActionBtn}
+                  >
+                    <Ionicons
+                      name="calculator-outline"
+                      size={14}
+                      color={colors.primaryDark}
+                    />
+                    <Text style={styles.weightedAvgActionText}>
+                      Aplicar custo médio (
+                      {formatCentsToBRL(weightedAverageCostCents)})
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <View style={styles.weightedAvgAppliedBanner}>
+                  <Text style={styles.weightedAvgAppliedText}>
+                    ✓ Custo médio ponderado (
+                    {formatCentsToBRL(weightedAverageCostCents)}/un.) aplicado
+                  </Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => {
+                      setUnitCostInput(
+                        maskBRLCurrencyInput(String(effectiveBatchCostCents)),
+                      );
+                    }}
+                  >
+                    <Text style={styles.weightedAvgUndoText}>
+                      Usar custo do lote (
+                      {formatCentsToBRL(effectiveBatchCostCents)})
+                    </Text>
+                  </Pressable>
+                </View>
+              )
+            ) : null}
+
+            <View style={styles.batchMetricsRow}>
+              <View style={styles.batchMetricItem}>
+                <Text style={styles.batchMetricLabel}>
+                  Total pago nesta compra
+                </Text>
+                <Text style={styles.batchMetricValue}>
+                  {parsedQty > 0
+                    ? formatCentsToBRL(batchTotalInvestmentCents)
+                    : 'R$ 0,00'}
+                </Text>
+              </View>
+              <View style={styles.batchMetricDivider} />
+              <View style={styles.batchMetricItem}>
+                <Text style={styles.batchMetricLabel}>
+                  Lucro estimado / un.
+                </Text>
+                <Text
+                  style={[
+                    styles.batchMetricValue,
+                    {
+                      color:
+                        unitProfitCents >= 0 ? colors.success : colors.error,
+                    },
+                  ]}
+                >
+                  {formatCentsToBRL(unitProfitCents)} ({marginPercent}%)
+                </Text>
+              </View>
+            </View>
+          </View>
+        ) : null}
 
         <FormField
           label={
@@ -587,6 +830,135 @@ const styles = StyleSheet.create({
   selectedProductMeta: {
     ...typography.caption,
     color: colors.textSecondary,
+  },
+  selectedProductPricingMeta: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.primaryDark,
+  },
+  batchPricingCard: {
+    backgroundColor: colors.background,
+    borderRadius: radius.controlLg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  batchPricingHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  batchPricingHeaderTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  batchPricingTitle: {
+    ...typography.bodyStrong,
+    color: colors.text,
+  },
+  batchPricingSubtitle: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  batchPricingInputsRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  batchPricingInputCol: {
+    flex: 1,
+  },
+  weightedAvgBanner: {
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.control,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  weightedAvgTextCol: {
+    gap: 2,
+  },
+  weightedAvgTitle: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: colors.primaryDark,
+  },
+  weightedAvgDescription: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  weightedAvgHighlight: {
+    fontWeight: '700',
+    color: colors.primaryDark,
+  },
+  weightedAvgActionBtn: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+  },
+  weightedAvgActionText: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: colors.primaryDark,
+  },
+  weightedAvgAppliedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    backgroundColor: colors.successSoft,
+    borderRadius: radius.control,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  weightedAvgAppliedText: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.success,
+  },
+  weightedAvgUndoText: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: colors.primaryDark,
+    textDecorationLine: 'underline',
+  },
+  batchMetricsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    borderRadius: radius.control,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: spacing.md,
+  },
+  batchMetricItem: {
+    flex: 1,
+    gap: 2,
+  },
+  batchMetricDivider: {
+    width: 1,
+    alignSelf: 'stretch',
+    backgroundColor: colors.border,
+  },
+  batchMetricLabel: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  batchMetricValue: {
+    ...typography.bodyStrong,
+    color: colors.text,
   },
   changeProductButton: {
     paddingHorizontal: spacing.md,

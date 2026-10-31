@@ -107,6 +107,8 @@ export interface AdjustStockInput {
   quantity: number;
   reason?: string | null;
   idempotencyKey: string;
+  unitCostCents?: number | null;
+  unitPriceCents?: number | null;
 }
 
 export async function adjustWorkspaceProductStock(
@@ -114,16 +116,89 @@ export async function adjustWorkspaceProductStock(
 ): Promise<AdjustStockRpcResult> {
   ensureConfigured();
 
-  const { data, error } = await supabase.rpc('adjust_stock', {
-    p_workspace_id: input.workspaceId,
-    p_product_id: input.productId,
-    p_movement_type: input.movementType as StockMovementType,
-    p_quantity: input.quantity,
-    p_reason: input.reason ?? null,
-    p_idempotency_key: input.idempotencyKey,
-  });
+  const hasPricingParams =
+    input.unitCostCents !== undefined || input.unitPriceCents !== undefined;
+
+  const { data, error } = await supabase.rpc(
+    'adjust_stock',
+    hasPricingParams
+      ? {
+          p_workspace_id: input.workspaceId,
+          p_product_id: input.productId,
+          p_movement_type: input.movementType as StockMovementType,
+          p_quantity: input.quantity,
+          p_reason: input.reason ?? null,
+          p_idempotency_key: input.idempotencyKey,
+          p_unit_cost_cents: input.unitCostCents ?? null,
+          p_unit_price_cents: input.unitPriceCents ?? null,
+        }
+      : {
+          p_workspace_id: input.workspaceId,
+          p_product_id: input.productId,
+          p_movement_type: input.movementType as StockMovementType,
+          p_quantity: input.quantity,
+          p_reason: input.reason ?? null,
+          p_idempotency_key: input.idempotencyKey,
+        },
+  );
 
   if (error) {
+    const normalizedErr = error.message.toLowerCase();
+    const isMissingNewSignature =
+      hasPricingParams &&
+      (error.code === 'PGRST202' ||
+        normalizedErr.includes('p_unit_cost_cents') ||
+        normalizedErr.includes('p_unit_price_cents') ||
+        normalizedErr.includes('could not find the function'));
+
+    if (isMissingNewSignature) {
+      // Fallback caso a migration 11 ainda não tenha sido executada no banco:
+      const fallback = await supabase.rpc('adjust_stock', {
+        p_workspace_id: input.workspaceId,
+        p_product_id: input.productId,
+        p_movement_type: input.movementType as StockMovementType,
+        p_quantity: input.quantity,
+        p_reason: input.reason ?? null,
+        p_idempotency_key: input.idempotencyKey,
+      });
+
+      if (fallback.error) {
+        throw new Error(fallback.error.message);
+      }
+
+      if (!fallback.data) {
+        throw new Error('Não foi possível confirmar a movimentação de estoque.');
+      }
+
+      if (
+        input.movementType === 'entry' &&
+        (input.unitCostCents != null || input.unitPriceCents != null)
+      ) {
+        const productUpdate: { cost_cents?: number; price_cents?: number } = {};
+        if (input.unitCostCents != null) {
+          productUpdate.cost_cents = input.unitCostCents;
+        }
+        if (input.unitPriceCents != null) {
+          productUpdate.price_cents = input.unitPriceCents;
+        }
+        await supabase
+          .from('products')
+          .update(productUpdate)
+          .eq('id', input.productId)
+          .eq('workspace_id', input.workspaceId);
+      }
+
+      const fallbackResult = fallback.data as AdjustStockRpcResult;
+      return {
+        ...fallbackResult,
+        quantity_delta: Number(fallbackResult.quantity_delta),
+        previous_stock_qty: Number(fallbackResult.previous_stock_qty),
+        resulting_stock_qty: Number(fallbackResult.resulting_stock_qty),
+        unit_cost_cents: input.unitCostCents ?? null,
+        unit_price_cents: input.unitPriceCents ?? null,
+      };
+    }
+
     throw new Error(error.message);
   }
 
@@ -137,6 +212,10 @@ export async function adjustWorkspaceProductStock(
     quantity_delta: Number(result.quantity_delta),
     previous_stock_qty: Number(result.previous_stock_qty),
     resulting_stock_qty: Number(result.resulting_stock_qty),
+    unit_cost_cents:
+      result.unit_cost_cents != null ? Number(result.unit_cost_cents) : null,
+    unit_price_cents:
+      result.unit_price_cents != null ? Number(result.unit_price_cents) : null,
   };
 }
 

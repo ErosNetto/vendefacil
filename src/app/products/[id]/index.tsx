@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
   AppHeader,
@@ -18,6 +18,10 @@ import {
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
 import { getProductStockHealth } from '@/features/inventory/schemas';
+import {
+  listWorkspaceStockMovements,
+  type StockMovementWithProduct,
+} from '@/features/inventory/services';
 import { getSignedProductImageUrl } from '@/features/products/imageService';
 import { calculateProfitMarginPercent } from '@/features/products/schemas';
 import {
@@ -27,7 +31,7 @@ import {
   setWorkspaceProductArchived,
 } from '@/features/products/services';
 import type { ProductRow } from '@/types/database';
-import { formatCentsToBRL } from '@/utils/formatters';
+import { formatCentsToBRL, formatDateBR } from '@/utils/formatters';
 
 export default function ProductDetailScreen() {
   const router = useRouter();
@@ -38,6 +42,9 @@ export default function ProductDetailScreen() {
   const [product, setProduct] = useState<ProductRow | null>(null);
   const [categoryName, setCategoryName] = useState<string>('Sem categoria');
   const [signedImageUrl, setSignedImageUrl] = useState<string | null>(null);
+  const [recentEntries, setRecentEntries] = useState<
+    StockMovementWithProduct[]
+  >([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [confirmArchiveOpen, setConfirmArchiveOpen] = useState(false);
@@ -52,9 +59,15 @@ export default function ProductDetailScreen() {
     setIsLoading(true);
     setErrorMessage(null);
     try {
-      const [record, categories] = await Promise.all([
+      const [record, categories, movements] = await Promise.all([
         getWorkspaceProductById(workspaceId, id),
         listWorkspaceCategories(workspaceId),
+        listWorkspaceStockMovements({
+          workspaceId,
+          productId: id,
+          filter: 'in',
+          limit: 10,
+        }).catch(() => [] as StockMovementWithProduct[]),
       ]);
 
       if (!record) {
@@ -63,6 +76,9 @@ export default function ProductDetailScreen() {
       }
 
       setProduct(record);
+      setRecentEntries(
+        movements.filter((m) => m.movement_type === 'entry').slice(0, 5),
+      );
       const foundCategory = categories.find((c) => c.id === record.category_id);
       setCategoryName(foundCategory?.name ?? 'Sem categoria');
 
@@ -234,6 +250,65 @@ export default function ProductDetailScreen() {
           <View style={styles.descriptionBox}>
             <Text style={styles.metaLabel}>Descrição</Text>
             <Text style={styles.descriptionText}>{product.description}</Text>
+          </View>
+        ) : null}
+
+        {recentEntries.length > 0 ? (
+          <View style={styles.batchHistorySection}>
+            <View style={styles.batchHistoryHeaderRow}>
+              <Text style={styles.batchHistoryTitle}>
+                Últimas remessas de entrada
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() =>
+                  router.push({
+                    pathname: '/inventory/adjust',
+                    params: { productId: product.id, movementType: 'entry' },
+                  })
+                }
+              >
+                <Text style={styles.batchHistoryActionText}>
+                  + Nova entrada
+                </Text>
+              </Pressable>
+            </View>
+            {recentEntries.map((entry) => (
+              <View key={entry.id} style={styles.batchHistoryItem}>
+                <View style={styles.batchHistoryTopRow}>
+                  <Text style={styles.batchHistoryDate}>
+                    {formatDateBR(entry.created_at)}
+                  </Text>
+                  <Text style={styles.batchHistoryQty}>
+                    +{entry.quantity_delta} un.
+                  </Text>
+                </View>
+                {entry.unit_cost_cents != null ||
+                entry.unit_price_cents != null ? (
+                  <Text style={styles.batchHistoryPricing}>
+                    {entry.unit_cost_cents != null
+                      ? `Custo: ${formatCentsToBRL(entry.unit_cost_cents)}/un. (Lote: ${formatCentsToBRL(
+                          Math.round(
+                            entry.quantity_delta * entry.unit_cost_cents,
+                          ),
+                        )})`
+                      : ''}
+                    {entry.unit_cost_cents != null &&
+                    entry.unit_price_cents != null
+                      ? ' • '
+                      : ''}
+                    {entry.unit_price_cents != null
+                      ? `Venda: ${formatCentsToBRL(entry.unit_price_cents)}`
+                      : ''}
+                  </Text>
+                ) : null}
+                {entry.reason ? (
+                  <Text style={styles.batchHistoryReason} numberOfLines={1}>
+                    {entry.reason}
+                  </Text>
+                ) : null}
+              </View>
+            ))}
           </View>
         ) : null}
 
@@ -410,6 +485,62 @@ const styles = StyleSheet.create({
   descriptionText: {
     ...typography.body,
     color: colors.text,
+  },
+  batchHistorySection: {
+    backgroundColor: colors.background,
+    borderRadius: radius.controlLg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  batchHistoryHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  batchHistoryTitle: {
+    ...typography.bodyStrong,
+    color: colors.text,
+  },
+  batchHistoryActionText: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: colors.primaryDark,
+  },
+  batchHistoryItem: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.control,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.sm,
+    gap: 2,
+  },
+  batchHistoryTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  batchHistoryDate: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  batchHistoryQty: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: colors.success,
+  },
+  batchHistoryPricing: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.primaryDark,
+  },
+  batchHistoryReason: {
+    ...typography.caption,
+    color: colors.textSecondary,
   },
   actionsColumn: {
     marginTop: spacing.md,

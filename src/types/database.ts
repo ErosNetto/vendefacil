@@ -122,6 +122,8 @@ export type StockMovementRow = {
   quantity_delta: number;
   previous_stock_qty: number;
   resulting_stock_qty: number;
+  unit_cost_cents?: number | null;
+  unit_price_cents?: number | null;
   reason: string | null;
   idempotency_key: string;
   reference_type: string | null;
@@ -138,6 +140,8 @@ export type AdjustStockRpcResult = {
   quantity_delta: number;
   previous_stock_qty: number;
   resulting_stock_qty: number;
+  unit_cost_cents?: number | null;
+  unit_price_cents?: number | null;
   reason: string | null;
   created_at: string;
   idempotent_replay: boolean;
@@ -864,13 +868,19 @@ export type Database = {
           p_quantity: number;
           p_reason?: string | null;
           p_idempotency_key?: string;
+          p_unit_cost_cents?: number | null;
+          p_unit_price_cents?: number | null;
         };
         Returns: AdjustStockRpcResult;
       };
       create_or_confirm_sale: {
         Args: {
           p_workspace_id: string;
-          p_items: { product_id: string; quantity: number }[];
+          p_items: {
+            product_id: string;
+            quantity: number;
+            unit_price_cents?: number | null;
+          }[];
           p_customer_id?: string | null;
           p_discount_cents?: number;
           p_notes?: string | null;
@@ -904,7 +914,11 @@ export type Database = {
         Args: {
           p_workspace_id: string;
           p_sale_id: string;
-          p_items: { product_id: string; quantity: number }[];
+          p_items: {
+            product_id: string;
+            quantity: number;
+            unit_price_cents?: number | null;
+          }[];
           p_customer_id?: string | null;
           p_discount_cents?: number;
           p_notes?: string | null;

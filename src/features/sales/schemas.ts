@@ -39,6 +39,7 @@ export interface SaleCartItem {
   productName: string;
   sku: string | null;
   unitPriceCents: number;
+  catalogPriceCents?: number;
   unitCostCents: number;
   availableStockQty: number;
   quantity: number;
@@ -119,6 +120,7 @@ export function addOrIncrementCartItem(
         productName: product.name,
         sku: product.sku,
         unitPriceCents: product.price_cents,
+        catalogPriceCents: product.price_cents,
         unitCostCents: product.cost_cents,
         availableStockQty,
         quantity: Math.round(delta * 1000) / 1000,
@@ -152,6 +154,23 @@ export function updateCartItemQuantity(
   const rounded = Math.round(nextQuantity * 1000) / 1000;
   return cart.map((item) =>
     item.productId === productId ? { ...item, quantity: rounded } : item,
+  );
+}
+
+export function updateCartItemUnitPrice(
+  cart: SaleCartItem[],
+  productId: string,
+  nextUnitPriceCents: number,
+): SaleCartItem[] {
+  if (!Number.isFinite(nextUnitPriceCents) || nextUnitPriceCents <= 0) {
+    return cart;
+  }
+
+  const roundedCents = Math.round(nextUnitPriceCents);
+  return cart.map((item) =>
+    item.productId === productId
+      ? { ...item, unitPriceCents: roundedCents }
+      : item,
   );
 }
 
@@ -191,7 +210,11 @@ export interface ValidatedSaleSubmissionResult {
   success: boolean;
   errorMessage?: string;
   payload?: {
-    items: { product_id: string; quantity: number }[];
+    items: {
+      product_id: string;
+      quantity: number;
+      unit_price_cents: number;
+    }[];
     discountCents: number;
     notes: string | null;
     confirmImmediately: boolean;
@@ -219,6 +242,12 @@ export function validateSaleSubmission(
       return {
         success: false,
         errorMessage: `Informe uma quantidade maior que zero para "${item.productName}".`,
+      };
+    }
+    if (!Number.isFinite(item.unitPriceCents) || item.unitPriceCents <= 0) {
+      return {
+        success: false,
+        errorMessage: `Informe um preço unitário válido maior que zero para "${item.productName}".`,
       };
     }
   }
@@ -348,6 +377,7 @@ export function validateSaleSubmission(
       items: input.items.map((item) => ({
         product_id: item.productId,
         quantity: item.quantity,
+        unit_price_cents: Math.round(item.unitPriceCents),
       })),
       discountCents,
       notes: cleanNotes ? cleanNotes : null,

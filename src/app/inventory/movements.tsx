@@ -24,7 +24,7 @@ import {
   type MovementHistoryFilter,
   type StockMovementWithProduct,
 } from '@/features/inventory/services';
-import { formatDateTimeBR } from '@/utils/formatters';
+import { formatCentsToBRL, formatDateTimeBR } from '@/utils/formatters';
 
 const FILTER_OPTIONS: { key: MovementHistoryFilter; label: string }[] = [
   { key: 'all', label: 'Todas' },
@@ -256,6 +256,38 @@ export default function InventoryMovementsScreen() {
                   </View>
                 </View>
 
+                {movement.unit_cost_cents != null ||
+                movement.unit_price_cents != null ? (
+                  <View style={styles.pricingBox}>
+                    <Ionicons
+                      name="cash-outline"
+                      size={14}
+                      color={colors.primaryDark}
+                    />
+                    <Text style={styles.pricingText}>
+                      {movement.unit_cost_cents != null
+                        ? `Custo un.: ${formatCentsToBRL(movement.unit_cost_cents)}${
+                            movement.quantity_delta > 0
+                              ? ` • Lote: ${formatCentsToBRL(
+                                  Math.round(
+                                    movement.quantity_delta *
+                                      movement.unit_cost_cents,
+                                  ),
+                                )}`
+                              : ''
+                          }`
+                        : ''}
+                      {movement.unit_cost_cents != null &&
+                      movement.unit_price_cents != null
+                        ? ' • '
+                        : ''}
+                      {movement.unit_price_cents != null
+                        ? `Venda: ${formatCentsToBRL(movement.unit_price_cents)}`
+                        : ''}
+                    </Text>
+                  </View>
+                ) : null}
+
                 {movement.reason ? (
                   <View style={styles.reasonBox}>
                     <Ionicons
@@ -407,6 +439,22 @@ const styles = StyleSheet.create({
     ...typography.caption,
     fontWeight: '700',
     color: colors.text,
+  },
+  pricingBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.control,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    marginTop: 2,
+  },
+  pricingText: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.primaryDark,
+    flex: 1,
   },
   reasonBox: {
     flexDirection: 'row',

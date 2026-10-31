@@ -9,6 +9,7 @@ import {
   cancelSaleSchema,
   createSaleIdempotencyKey,
   updateCartItemQuantity,
+  updateCartItemUnitPrice,
   validateSaleSubmission,
 } from './schemas';
 
@@ -59,6 +60,11 @@ describe('sales schemas and cart calculations', () => {
     cart = updateCartItemQuantity(cart, 'prod-a', 0);
     expect(cart).toHaveLength(1);
     expect(cart[0]?.productId).toBe('prod-b');
+
+    // Altera preço unitário negociado apenas naquela venda
+    cart = updateCartItemUnitPrice(cart, 'prod-b', 4200);
+    expect(cart[0]?.unitPriceCents).toBe(4200);
+    expect(cart[0]?.catalogPriceCents).toBe(4500);
   });
 
   it('calculates subtotal, discount, total, profit, and stock overflow', () => {

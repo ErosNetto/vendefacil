@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import type { ProductRow, StockMovementType } from '@/types/database';
+import { parseBRLInputToCents } from '@/utils/formatters';
 
 export const MANUAL_STOCK_MOVEMENT_TYPES = [
   'entry',
@@ -128,6 +129,52 @@ export function calculateStockPreview(
   };
 }
 
+export interface WeightedAverageCostInput {
+  currentStockQty: number;
+  currentCostCents: number;
+  entryQuantity: number;
+  entryCostCents: number;
+}
+
+export function calculateWeightedAverageCostCents(
+  input: WeightedAverageCostInput,
+): number {
+  const safeCurrentQty = Math.max(
+    0,
+    Number.isFinite(input.currentStockQty) ? input.currentStockQty : 0,
+  );
+  const safeCurrentCost = Math.max(
+    0,
+    Number.isFinite(input.currentCostCents)
+      ? Math.round(input.currentCostCents)
+      : 0,
+  );
+  const safeEntryQty = Math.max(
+    0,
+    Number.isFinite(input.entryQuantity) ? input.entryQuantity : 0,
+  );
+  const safeEntryCost = Math.max(
+    0,
+    Number.isFinite(input.entryCostCents)
+      ? Math.round(input.entryCostCents)
+      : 0,
+  );
+
+  if (safeEntryQty <= 0) {
+    return safeCurrentCost;
+  }
+
+  if (safeCurrentQty <= 0) {
+    return safeEntryCost;
+  }
+
+  const totalQty = safeCurrentQty + safeEntryQty;
+  const totalValueCents =
+    safeCurrentQty * safeCurrentCost + safeEntryQty * safeEntryCost;
+
+  return Math.round(totalValueCents / totalQty);
+}
+
 export function createStockIdempotencyKey(productId: string): string {
   const cleanProduct = productId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 12);
   const timestamp = Date.now().toString(36);
@@ -155,6 +202,8 @@ export const stockAdjustmentFormSchema = z
       .optional()
       .or(z.literal('')),
     currentStockQty: z.number().min(0),
+    unitCostInput: z.string().trim().optional().or(z.literal('')),
+    unitPriceInput: z.string().trim().optional().or(z.literal('')),
   })
   .superRefine((values, ctx) => {
     const meta = STOCK_MOVEMENT_META[values.movementType];
@@ -167,6 +216,33 @@ export const stockAdjustmentFormSchema = z
         message:
           'Informe um motivo com pelo menos 3 caracteres para ajustes ou avarias.',
       });
+    }
+
+    if (values.movementType === 'entry') {
+      const cleanCost = values.unitCostInput?.trim() ?? '';
+      if (cleanCost.length > 0) {
+        const parsedCost = parseBRLInputToCents(cleanCost);
+        if (parsedCost === null || parsedCost < 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['unitCostInput'],
+            message:
+              'Informe um custo unitário válido (maior ou igual a zero).',
+          });
+        }
+      }
+
+      const cleanPrice = values.unitPriceInput?.trim() ?? '';
+      if (cleanPrice.length > 0) {
+        const parsedPrice = parseBRLInputToCents(cleanPrice);
+        if (parsedPrice === null || parsedPrice <= 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['unitPriceInput'],
+            message: 'Informe um preço de venda válido maior que zero.',
+          });
+        }
+      }
     }
 
     const quantity = parsePositiveQuantityInput(values.quantityInput);
@@ -195,6 +271,8 @@ export interface NormalizedStockAdjustmentPayload {
   movementType: ManualStockMovementType;
   quantity: number;
   reason: string | null;
+  unitCostCents: number | null;
+  unitPriceCents: number | null;
 }
 
 export function normalizeStockAdjustmentPayload(
@@ -206,12 +284,19 @@ export function normalizeStockAdjustmentPayload(
   }
 
   const cleanReason = values.reason?.trim() ?? '';
+  const isEntry = values.movementType === 'entry';
+  const cleanCost = values.unitCostInput?.trim() ?? '';
+  const cleanPrice = values.unitPriceInput?.trim() ?? '';
 
   return {
     productId: values.productId.trim(),
     movementType: values.movementType,
     quantity,
     reason: cleanReason ? cleanReason : null,
+    unitCostCents:
+      isEntry && cleanCost ? parseBRLInputToCents(cleanCost) : null,
+    unitPriceCents:
+      isEntry && cleanPrice ? parseBRLInputToCents(cleanPrice) : null,
   };
 }
 

@@ -70,6 +70,7 @@
 - [x] Venda com data retroativa (`sale_date` em `supabase/migrations/20261024000009_retroactive_sale_date.sql`, `supabase/tests/retroactive_sale_date_test.sql`, competência em DRE/Dashboard e cálculo de 1º vencimento/pagamento à vista).
 - [x] Melhorias de UX e atualização para Expo SDK 58 (`ScrollToTopButton`, `useScrollToTop`, correção de grade 7 colunas no `DatePickerField`).
 - [x] Central de comunicação WhatsApp e cadastro de PIX do vendedor (`supabase/migrations/20261031000010_workspace_pix_settings.sql`, `src/features/whatsapp/`, comprovante/recibo de venda, orçamento de rascunho com previsão de parcelas, lembretes de vencimento, cobranças em atraso e regras por forma de pagamento em Vendas, Financeiro, Agenda e Clientes).
+- [x] Precificação por remessa na entrada de estoque (custo unitário, novo preço de venda, sugestão de custo médio ponderado e histórico de lotes) + modal de preço unitário negociado no carrinho da Nova Venda (`supabase/migrations/20261031000011_stock_entry_pricing_and_custom_sale_price.sql`, `src/app/inventory/adjust.tsx`, `src/app/inventory/movements.tsx`, `src/app/products/[id]/index.tsx`, `src/app/sales/new.tsx`).
 
 ## Fase 9 — APK
 - [ ] Testes RLS e fluxos ponta a ponta.

@@ -215,7 +215,11 @@ export async function getWorkspaceSaleDetail(
 export interface CreateOrConfirmSaleInput {
   workspaceId: string;
   customerId?: string | null;
-  items: { product_id: string; quantity: number }[];
+  items: {
+    product_id: string;
+    quantity: number;
+    unit_price_cents?: number | null;
+  }[];
   discountCents: number;
   notes?: string | null;
   confirmImmediately: boolean;
@@ -264,7 +268,11 @@ export interface UpdateDraftSaleInput {
   workspaceId: string;
   saleId: string;
   customerId?: string | null;
-  items: { product_id: string; quantity: number }[];
+  items: {
+    product_id: string;
+    quantity: number;
+    unit_price_cents?: number | null;
+  }[];
   discountCents: number;
   notes?: string | null;
   confirmImmediately: boolean;

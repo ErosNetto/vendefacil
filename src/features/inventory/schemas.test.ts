@@ -5,6 +5,7 @@ import type { ProductRow } from '@/types/database';
 import {
   calculateInventoryOverviewMetrics,
   calculateStockPreview,
+  calculateWeightedAverageCostCents,
   createStockIdempotencyKey,
   getProductStockHealth,
   normalizeStockAdjustmentPayload,
@@ -67,6 +68,40 @@ describe('inventory schemas and helpers', () => {
         movementType: 'entry',
         quantity: 12,
         reason: 'Compra mensal',
+        unitCostCents: null,
+        unitPriceCents: null,
+      });
+    }
+  });
+
+  it('validates entry with custom batch cost and selling price and calculates weighted average cost', () => {
+    const weightedAvg = calculateWeightedAverageCostCents({
+      currentStockQty: 2,
+      currentCostCents: 5000,
+      entryQuantity: 8,
+      entryCostCents: 6000,
+    });
+    expect(weightedAvg).toBe(5800);
+
+    const parsed = stockAdjustmentFormSchema.safeParse({
+      productId: 'prod-1',
+      movementType: 'entry',
+      quantityInput: '8',
+      reason: 'Lote Outubro',
+      currentStockQty: 2,
+      unitCostInput: '60,00',
+      unitPriceInput: '115,00',
+    });
+
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(normalizeStockAdjustmentPayload(parsed.data)).toEqual({
+        productId: 'prod-1',
+        movementType: 'entry',
+        quantity: 8,
+        reason: 'Lote Outubro',
+        unitCostCents: 6000,
+        unitPriceCents: 11500,
       });
     }
   });
