@@ -27,6 +27,7 @@ import {
 import { ReceivePaymentModal } from '@/features/finance/ReceivePaymentModal';
 import {
   getInstallmentDisplayMeta,
+  getTodayISODate,
   getWorkspaceFinanceSettings,
 } from '@/features/finance/schemas';
 import {
@@ -38,6 +39,16 @@ import {
   SALE_STATUS_META,
 } from '@/features/sales/schemas';
 import { listWorkspaceSales } from '@/features/sales/services';
+import {
+  buildCustomerOpenSummaryWhatsAppMessage,
+  buildSmartInstallmentWhatsAppMessage,
+  shouldIncludePixInWhatsApp,
+  shouldShowInstallmentWhatsAppCharge,
+} from '@/features/whatsapp/schemas';
+import {
+  openWhatsAppWithMessage,
+  useWorkspacePixSettings,
+} from '@/features/whatsapp/services';
 import type {
   CustomerRow,
   InstallmentRow,
@@ -55,9 +66,12 @@ export default function CustomerDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { activeWorkspace } = useSession();
   const workspaceId = activeWorkspace?.workspace.id ?? null;
+  const workspaceName = activeWorkspace?.workspace.name ?? 'VendeFácil';
   const financeSettings = getWorkspaceFinanceSettings(
     activeWorkspace?.workspace,
   );
+  const { pixSettings } = useWorkspacePixSettings(activeWorkspace?.workspace);
+  const todayISO = useMemo(() => getTodayISODate(), []);
 
   const [customer, setCustomer] = useState<CustomerRow | null>(null);
   const [customerSales, setCustomerSales] = useState<SaleRow[]>([]);
@@ -152,6 +166,66 @@ export default function CustomerDetailScreen() {
     () => validPayments.reduce((sum, p) => sum + p.amount_cents, 0),
     [validPayments],
   );
+
+  const salePaymentMethodMap = useMemo(
+    () => new Map(customerSales.map((s) => [s.id, s.payment_method])),
+    [customerSales],
+  );
+
+  const chargeableOpenInstallments = useMemo(
+    () =>
+      openInstallments.filter((inst) =>
+        shouldShowInstallmentWhatsAppCharge(
+          salePaymentMethodMap.get(inst.sale_id),
+        ),
+      ),
+    [openInstallments, salePaymentMethodMap],
+  );
+
+  const chargeablePrincipalCents = useMemo(
+    () =>
+      chargeableOpenInstallments.reduce(
+        (sum, item) => sum + item.remaining_principal_cents,
+        0,
+      ),
+    [chargeableOpenInstallments],
+  );
+
+  function handleSendCustomerWhatsAppSummary(): void {
+    if (!customer) return;
+    if (chargeableOpenInstallments.length > 0) {
+      const hasPixCompatible = chargeableOpenInstallments.some((inst) =>
+        shouldIncludePixInWhatsApp(salePaymentMethodMap.get(inst.sale_id)),
+      );
+      const allDebitCard = chargeableOpenInstallments.every(
+        (inst) => salePaymentMethodMap.get(inst.sale_id) === 'debit_card',
+      );
+      const message = buildCustomerOpenSummaryWhatsAppMessage({
+        customerName: customer.full_name,
+        openInstallments: chargeableOpenInstallments,
+        includePix: hasPixCompatible,
+        paymentMethodNote: allDebitCard ? 'Cartão de Débito' : null,
+        workspaceName,
+        pix: pixSettings,
+      });
+      void openWhatsAppWithMessage({ phone: customer.phone, message });
+    } else {
+      const message = `Olá, *${customer.full_name}*! Tudo bem? Aqui é de *${workspaceName}*. Como posso ajudar você hoje?`;
+      void openWhatsAppWithMessage({ phone: customer.phone, message });
+    }
+  }
+
+  function handleSendInstallmentWhatsApp(inst: InstallmentRow): void {
+    const message = buildSmartInstallmentWhatsAppMessage({
+      installment: inst,
+      todayISO,
+      financeSettings,
+      paymentMethod: salePaymentMethodMap.get(inst.sale_id),
+      workspaceName,
+      pix: pixSettings,
+    });
+    void openWhatsAppWithMessage({ phone: customer?.phone, message });
+  }
 
   async function handleToggleArchive(): Promise<void> {
     if (!workspaceId || !customer || isArchiving) {
@@ -286,6 +360,31 @@ export default function CustomerDetailScreen() {
         </View>
 
         <View style={styles.actionsRow}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={handleSendCustomerWhatsAppSummary}
+            style={styles.whatsAppActionBanner}
+          >
+            <View style={styles.whatsAppIconBadge}>
+              <Ionicons name="logo-whatsapp" size={20} color="#FFFFFF" />
+            </View>
+            <View style={styles.whatsAppTextCol}>
+              <Text style={styles.whatsAppBannerTitle}>
+                {chargeableOpenInstallments.length > 0
+                  ? 'Enviar resumo de cobrança no WhatsApp'
+                  : 'Conversar com cliente no WhatsApp'}
+              </Text>
+              <Text style={styles.whatsAppBannerSubtitle}>
+                {chargeableOpenInstallments.length > 0
+                  ? `Envia as ${chargeableOpenInstallments.length} parcela(s) em aberto (${formatCentsToBRL(chargeablePrincipalCents)})`
+                  : customer.phone
+                    ? `Abre conversa direta com ${customer.phone}`
+                    : 'Abre o WhatsApp para escolher o contato'}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#128C7E" />
+          </Pressable>
+
           {!customer.is_archived ? (
             <PrimaryButton
               label="Nova venda para este cliente"
@@ -378,36 +477,57 @@ export default function CustomerDetailScreen() {
             {openInstallments.map((inst) => {
               const meta = getInstallmentDisplayMeta(inst);
               return (
-                <View key={inst.id} style={styles.saleItemCard}>
-                  <View style={styles.saleItemLeft}>
-                    <Text style={styles.saleItemTitle}>
-                      {inst.installment_number === 0
-                        ? 'Entrada'
-                        : `Parcela ${inst.installment_number}/${inst.total_installments}`}{' '}
-                      • Venc.: {formatDateBR(inst.due_date)}
-                    </Text>
-                    <Text style={styles.saleItemMeta}>
-                      Valor original: {formatCentsToBRL(inst.principal_cents)}
-                    </Text>
+                <View key={inst.id} style={styles.installmentItemCard}>
+                  <View style={styles.installmentTopRow}>
+                    <View style={styles.saleItemLeft}>
+                      <Text style={styles.saleItemTitle}>
+                        {inst.installment_number === 0
+                          ? 'Entrada'
+                          : `Parcela ${inst.installment_number}/${inst.total_installments}`}{' '}
+                        • Venc.: {formatDateBR(inst.due_date)}
+                      </Text>
+                      <Text style={styles.saleItemMeta}>
+                        Valor original: {formatCentsToBRL(inst.principal_cents)}
+                      </Text>
+                    </View>
+                    <StatusBadge label={meta.label} tone={meta.tone} />
                   </View>
 
-                  <View style={styles.saleItemRight}>
-                    <StatusBadge label={meta.label} tone={meta.tone} />
-                    <MoneyText
-                      cents={inst.remaining_principal_cents}
-                      size="sm"
-                      tone={meta.state === 'overdue' ? 'error' : 'primary'}
-                    />
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => {
-                        setPaymentModalInstallments([inst]);
-                        setIsPaymentModalOpen(true);
-                      }}
-                      style={styles.receivePillBtn}
-                    >
-                      <Text style={styles.receivePillBtnText}>Receber</Text>
-                    </Pressable>
+                  <View style={styles.installmentBottomRow}>
+                    <View>
+                      <Text style={styles.saleItemMeta}>Saldo a receber</Text>
+                      <MoneyText
+                        cents={inst.remaining_principal_cents}
+                        size="sm"
+                        tone={meta.state === 'overdue' ? 'error' : 'primary'}
+                      />
+                    </View>
+                    <View style={styles.installmentActionPills}>
+                      {shouldShowInstallmentWhatsAppCharge(
+                        salePaymentMethodMap.get(inst.sale_id),
+                      ) ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => handleSendInstallmentWhatsApp(inst)}
+                          style={styles.whatsAppPillBtn}
+                        >
+                          <Ionicons name="logo-whatsapp" size={13} color="#128C7E" />
+                          <Text style={styles.whatsAppPillBtnText}>
+                            {meta.state === 'overdue' ? 'Cobrar' : 'Lembrar'}
+                          </Text>
+                        </Pressable>
+                      ) : null}
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => {
+                          setPaymentModalInstallments([inst]);
+                          setIsPaymentModalOpen(true);
+                        }}
+                        style={styles.receivePillBtn}
+                      >
+                        <Text style={styles.receivePillBtnText}>Receber</Text>
+                      </Pressable>
+                    </View>
                   </View>
                 </View>
               );
@@ -583,6 +703,58 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     gap: spacing.sm,
   },
+  whatsAppActionBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F8F5',
+    borderWidth: 1,
+    borderColor: '#A3E4D7',
+    borderRadius: radius.card,
+    padding: spacing.md,
+    gap: spacing.md,
+  },
+  whatsAppIconBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.pill,
+    backgroundColor: '#25D366',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  whatsAppTextCol: {
+    flex: 1,
+    gap: 2,
+  },
+  whatsAppBannerTitle: {
+    ...typography.bodyStrong,
+    color: '#0E6655',
+  },
+  whatsAppBannerSubtitle: {
+    ...typography.caption,
+    color: '#117A65',
+  },
+  installmentActionPills: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 2,
+  },
+  whatsAppPillBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#E8F8F5',
+    borderWidth: 1,
+    borderColor: '#A3E4D7',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+  },
+  whatsAppPillBtnText: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: '#0E6655',
+  },
   sectionTitle: {
     ...typography.section,
     color: colors.text,
@@ -645,6 +817,29 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.lg,
+    gap: spacing.sm,
+  },
+  installmentItemCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.sm,
+  },
+  installmentTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  installmentBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    paddingTop: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
     gap: spacing.sm,
   },
   saleItemLeft: {

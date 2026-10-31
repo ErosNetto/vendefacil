@@ -1,5 +1,7 @@
 export type WorkspaceRole = 'owner' | 'admin' | 'seller';
 
+export type PixKeyType = 'cpf_cnpj' | 'phone' | 'email' | 'random';
+
 export type ProfileRow = {
   id: string;
   full_name: string;
@@ -17,6 +19,10 @@ export type WorkspaceRow = {
   default_fine_percent?: number;
   default_monthly_interest_percent?: number;
   grace_period_days?: number;
+  pix_key_type?: PixKeyType | null;
+  pix_key?: string | null;
+  pix_bank_name?: string | null;
+  pix_holder_name?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -301,6 +307,14 @@ export type UpdateWorkspaceFinanceSettingsRpcResult = {
   grace_period_days: number;
 };
 
+export type UpdateWorkspacePixSettingsRpcResult = {
+  workspace_id: string;
+  pix_key_type: PixKeyType | null;
+  pix_key: string | null;
+  pix_bank_name: string | null;
+  pix_holder_name: string | null;
+};
+
 export type CreateOrConfirmSaleRpcResult = {
   sale_id: string;
   workspace_id: string;
@@ -374,6 +388,10 @@ export type Database = {
           default_fine_percent?: number;
           default_monthly_interest_percent?: number;
           grace_period_days?: number;
+          pix_key_type?: PixKeyType | null;
+          pix_key?: string | null;
+          pix_bank_name?: string | null;
+          pix_holder_name?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -383,6 +401,10 @@ export type Database = {
           default_fine_percent?: number;
           default_monthly_interest_percent?: number;
           grace_period_days?: number;
+          pix_key_type?: PixKeyType | null;
+          pix_key?: string | null;
+          pix_bank_name?: string | null;
+          pix_holder_name?: string | null;
           updated_at?: string;
         };
         Relationships: [];
@@ -905,6 +927,16 @@ export type Database = {
           p_grace_period_days: number;
         };
         Returns: UpdateWorkspaceFinanceSettingsRpcResult;
+      };
+      update_workspace_pix_settings: {
+        Args: {
+          p_workspace_id: string;
+          p_pix_key_type?: PixKeyType | null;
+          p_pix_key?: string | null;
+          p_pix_bank_name?: string | null;
+          p_pix_holder_name?: string | null;
+        };
+        Returns: UpdateWorkspacePixSettingsRpcResult;
       };
       record_installment_payment: {
         Args: {

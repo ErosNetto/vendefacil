@@ -3,7 +3,6 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   FlatList,
-  Linking,
   Platform,
   Pressable,
   RefreshControl,
@@ -41,25 +40,38 @@ import {
   getWorkspaceFinanceSettings,
   type WorkspaceFinanceSettings,
 } from '@/features/finance/schemas';
+import {
+  buildSmartInstallmentWhatsAppMessage,
+  shouldShowInstallmentWhatsAppCharge,
+} from '@/features/whatsapp/schemas';
+import {
+  openWhatsAppWithMessage,
+  useWorkspacePixSettings,
+} from '@/features/whatsapp/services';
 import { supabase } from '@/lib/supabase';
-import type { CustomerRow, InstallmentRow } from '@/types/database';
+import type {
+  CustomerRow,
+  InstallmentRow,
+  PaymentMethod,
+  SaleRow,
+} from '@/types/database';
 import { formatCentsToBRL, formatDateBR } from '@/utils/formatters';
 
 interface CalendarCardItemProps {
   item: InstallmentRow;
   todayISO: string;
-  customerPhone?: string | null;
   financeSettings: WorkspaceFinanceSettings;
+  paymentMethod?: PaymentMethod | null;
   onPressSale: (saleId: string) => void;
   onPressReceive: (item: InstallmentRow) => void;
-  onPressWhatsApp: (phone: string, customerName: string, amountCents: number, dueDate: string) => void;
+  onPressWhatsApp: (item: InstallmentRow) => void;
 }
 
 const CalendarCardItem = memo(function CalendarCardItem({
   item,
   todayISO,
-  customerPhone,
   financeSettings,
+  paymentMethod,
   onPressSale,
   onPressReceive,
   onPressWhatsApp,
@@ -143,21 +155,16 @@ const CalendarCardItem = memo(function CalendarCardItem({
         </Pressable>
 
         <View style={styles.cardActionsRight}>
-          {customerPhone ? (
+          {shouldShowInstallmentWhatsAppCharge(paymentMethod) ? (
             <Pressable
               accessibilityRole="button"
-              onPress={() =>
-                onPressWhatsApp(
-                  customerPhone,
-                  customerName,
-                  item.remaining_principal_cents,
-                  item.due_date,
-                )
-              }
+              onPress={() => onPressWhatsApp(item)}
               style={styles.whatsAppButton}
             >
-              <Ionicons name="logo-whatsapp" size={15} color={colors.primary} />
-              <Text style={styles.whatsAppButtonText}>Lembrar</Text>
+              <Ionicons name="logo-whatsapp" size={15} color="#128C7E" />
+              <Text style={styles.whatsAppButtonText}>
+                {isOverdue ? 'Cobrar' : 'Lembrar'}
+              </Text>
             </Pressable>
           ) : null}
 
@@ -185,6 +192,9 @@ export default function CalendarTabScreen() {
   const [customerPhoneMap, setCustomerPhoneMap] = useState<Map<string, string>>(
     new Map(),
   );
+  const [salePaymentMethodMap, setSalePaymentMethodMap] = useState<
+    Map<string, PaymentMethod>
+  >(new Map());
   const [filter, setFilter] = useState<CalendarFilterKey>('today');
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -198,6 +208,7 @@ export default function CalendarTabScreen() {
     () => getWorkspaceFinanceSettings(workspace),
     [workspace],
   );
+  const { pixSettings } = useWorkspacePixSettings(workspace);
 
   const loadCalendarData = useCallback(
     async (isPullRefresh: boolean = false) => {
@@ -216,11 +227,15 @@ export default function CalendarTabScreen() {
       setErrorMessage(null);
 
       try {
-        const [instList, customersRes] = await Promise.all([
+        const [instList, customersRes, salesRes] = await Promise.all([
           fetchCalendarInstallments(workspaceId),
           supabase
             .from('customers')
             .select('id, phone')
+            .eq('workspace_id', workspaceId),
+          supabase
+            .from('sales')
+            .select('id, payment_method')
             .eq('workspace_id', workspaceId),
         ]);
 
@@ -235,6 +250,19 @@ export default function CalendarTabScreen() {
           }
         }
         setCustomerPhoneMap(phoneMap);
+
+        const methodMap = new Map<string, PaymentMethod>();
+        if (salesRes.data) {
+          for (const s of salesRes.data as Pick<
+            SaleRow,
+            'id' | 'payment_method'
+          >[]) {
+            if (s.payment_method) {
+              methodMap.set(s.id, s.payment_method);
+            }
+          }
+        }
+        setSalePaymentMethodMap(methodMap);
       } catch (error) {
         setErrorMessage(
           error instanceof Error
@@ -310,35 +338,28 @@ export default function CalendarTabScreen() {
   }, []);
 
   const handlePressWhatsApp = useCallback(
-    (
-      phone: string,
-      customerName: string,
-      amountCents: number,
-      dueDate: string,
-    ) => {
-      const cleanPhone = phone.replace(/\D/g, '');
-      const formattedAmount = formatCentsToBRL(amountCents);
-      const formattedDate = formatDateBR(dueDate);
-      const message = `Olá ${customerName}! Tudo bem? Passando para lembrar da sua parcela no valor de ${formattedAmount} com vencimento em ${formattedDate}. Qualquer dúvida estamos à disposição!`;
-      const url = `whatsapp://send?phone=55${cleanPhone}&text=${encodeURIComponent(
-        message,
-      )}`;
-
-      Linking.canOpenURL(url)
-        .then((supported) => {
-          if (supported) {
-            return Linking.openURL(url);
-          }
-          // Fallback para web whatsapp
-          return Linking.openURL(
-            `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(message)}`,
-          );
-        })
-        .catch(() => {
-          // Ignorar se falhar
-        });
+    (item: InstallmentRow) => {
+      const phone = item.customer_id
+        ? (customerPhoneMap.get(item.customer_id) ?? null)
+        : null;
+      const message = buildSmartInstallmentWhatsAppMessage({
+        installment: item,
+        todayISO,
+        financeSettings,
+        paymentMethod: salePaymentMethodMap.get(item.sale_id),
+        workspaceName: workspace?.name ?? 'VendeFácil',
+        pix: pixSettings,
+      });
+      void openWhatsAppWithMessage({ phone, message });
     },
-    [],
+    [
+      customerPhoneMap,
+      financeSettings,
+      pixSettings,
+      salePaymentMethodMap,
+      todayISO,
+      workspace?.name,
+    ],
   );
 
   const keyExtractor = useCallback((item: InstallmentRow) => item.id, []);
@@ -348,8 +369,8 @@ export default function CalendarTabScreen() {
       <CalendarCardItem
         item={item}
         todayISO={todayISO}
-        customerPhone={item.customer_id ? customerPhoneMap.get(item.customer_id) : null}
         financeSettings={financeSettings}
+        paymentMethod={salePaymentMethodMap.get(item.sale_id)}
         onPressSale={handlePressSale}
         onPressReceive={handlePressReceive}
         onPressWhatsApp={handlePressWhatsApp}
@@ -357,8 +378,8 @@ export default function CalendarTabScreen() {
     ),
     [
       todayISO,
-      customerPhoneMap,
       financeSettings,
+      salePaymentMethodMap,
       handlePressSale,
       handlePressReceive,
       handlePressWhatsApp,
@@ -661,14 +682,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: colors.primarySoft,
+    backgroundColor: '#E8F8F5',
+    borderWidth: 1,
+    borderColor: '#A3E4D7',
     paddingVertical: 8,
     paddingHorizontal: spacing.md,
     borderRadius: radius.control,
   },
   whatsAppButtonText: {
     ...typography.caption,
-    color: colors.primaryDark,
+    color: '#0E6655',
     fontWeight: '700',
   },
   receiveButton: {

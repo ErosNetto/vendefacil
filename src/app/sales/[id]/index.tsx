@@ -18,11 +18,17 @@ import {
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
-import { listWorkspaceCustomers } from '@/features/customers/services';
+import {
+  getWorkspaceCustomerById,
+  listWorkspaceCustomers,
+} from '@/features/customers/services';
 import { ReceivePaymentModal } from '@/features/finance/ReceivePaymentModal';
 import {
+  addDaysToISODate,
+  buildInstallmentPreview,
   calculateSuggestedLateCharges,
   getInstallmentDisplayMeta,
+  getTodayISODate,
   getWorkspaceFinanceSettings,
   PAYMENT_METHOD_LABELS,
   SALE_PAYMENT_MODE_LABELS,
@@ -39,6 +45,16 @@ import {
   linkSaleCustomer,
   mapSaleServiceError,
 } from '@/features/sales/services';
+import {
+  buildDraftQuoteWhatsAppMessage,
+  buildSaleReceiptWhatsAppMessage,
+  buildSmartInstallmentWhatsAppMessage,
+  shouldShowInstallmentWhatsAppCharge,
+} from '@/features/whatsapp/schemas';
+import {
+  openWhatsAppWithMessage,
+  useWorkspacePixSettings,
+} from '@/features/whatsapp/services';
 import type {
   CustomerRow,
   InstallmentRow,
@@ -60,8 +76,10 @@ export default function SaleDetailScreen() {
   const financeSettings = getWorkspaceFinanceSettings(
     activeWorkspace?.workspace,
   );
+  const { pixSettings } = useWorkspacePixSettings(activeWorkspace?.workspace);
 
   const [sale, setSale] = useState<SaleRow | null>(null);
+  const [customerPhone, setCustomerPhone] = useState<string | null>(null);
   const [items, setItems] = useState<SaleItemRow[]>([]);
   const [installments, setInstallments] = useState<InstallmentRow[]>([]);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
@@ -150,6 +168,7 @@ export default function SaleDetailScreen() {
           customer_name_snapshot: result.customerName,
         })),
       );
+      setCustomerPhone(customer?.phone ?? null);
       setIsCustomerModalOpen(false);
     } catch (err) {
       setActionError(mapSaleServiceError(err));
@@ -180,6 +199,16 @@ export default function SaleDetailScreen() {
       setItems(detail.items);
       setInstallments(saleInstallments);
       setPayments(salePayments);
+
+      if (detail.sale.customer_id) {
+        const cust = await getWorkspaceCustomerById(
+          workspaceId,
+          detail.sale.customer_id,
+        ).catch(() => null);
+        setCustomerPhone(cust?.phone ?? null);
+      } else {
+        setCustomerPhone(null);
+      }
     } catch (error) {
       setErrorMessage(mapSaleServiceError(error));
     } finally {
@@ -265,6 +294,66 @@ export default function SaleDetailScreen() {
   }
 
   const statusMeta = SALE_STATUS_META[sale.status];
+  const workspaceName = activeWorkspace?.workspace.name ?? 'Loja';
+
+  const draftInstallmentPreview =
+    sale.status === 'draft'
+      ? buildInstallmentPreview({
+          totalCents: sale.total_cents,
+          paymentMode: sale.payment_mode ?? 'cash',
+          downPaymentCents: Math.max(0, sale.down_payment_cents ?? 0),
+          installmentCount: Math.max(1, sale.installment_count ?? 1),
+          firstDueDateISO:
+            sale.first_due_date ??
+            addDaysToISODate(
+              sale.sale_date ?? sale.created_at.slice(0, 10) ?? getTodayISODate(),
+              30,
+            ),
+          todayISO:
+            sale.sale_date ?? sale.created_at.slice(0, 10) ?? getTodayISODate(),
+        })
+      : [];
+
+  function handleSendSaleWhatsApp(): void {
+    if (!sale) {
+      return;
+    }
+    const message =
+      sale.status === 'draft'
+        ? buildDraftQuoteWhatsAppMessage({
+            workspaceName,
+            sale,
+            items,
+            pix: pixSettings,
+          })
+        : buildSaleReceiptWhatsAppMessage({
+            workspaceName,
+            sale,
+            items,
+            installments,
+            pix: pixSettings,
+          });
+
+    void openWhatsAppWithMessage({
+      phone: customerPhone,
+      message,
+    });
+  }
+
+  function handleSendInstallmentWhatsApp(inst: InstallmentRow): void {
+    const message = buildSmartInstallmentWhatsAppMessage({
+      workspaceName,
+      installment: inst,
+      financeSettings,
+      paymentMethod: sale?.payment_method,
+      pix: pixSettings,
+    });
+
+    void openWhatsAppWithMessage({
+      phone: customerPhone,
+      message,
+    });
+  }
 
   return (
     <Screen>
@@ -372,6 +461,35 @@ export default function SaleDetailScreen() {
             <Text style={styles.notesValue}>{sale.notes}</Text>
           </View>
         ) : null}
+
+        {sale.status !== 'cancelled' ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={handleSendSaleWhatsApp}
+            style={styles.whatsAppBannerBtn}
+          >
+            <View style={styles.whatsAppBannerLeft}>
+              <Ionicons name="logo-whatsapp" size={20} color={colors.white} />
+              <View style={styles.whatsAppBannerTextCol}>
+                <Text style={styles.whatsAppBannerTitle}>
+                  {sale.status === 'draft'
+                    ? 'Enviar orçamento no WhatsApp'
+                    : 'Enviar comprovante no WhatsApp'}
+                </Text>
+                <Text style={styles.whatsAppBannerSubtitle}>
+                  {customerPhone
+                    ? `Abre direto na conversa (${customerPhone})`
+                    : 'Abre o WhatsApp com o resumo pronto'}
+                </Text>
+              </View>
+            </View>
+            <Ionicons
+              name="chevron-forward"
+              size={18}
+              color={colors.white}
+            />
+          </Pressable>
+        ) : null}
       </View>
 
       {/* Itens com Snapshot Imutável (RF-041) */}
@@ -420,6 +538,61 @@ export default function SaleDetailScreen() {
           ))}
         </View>
       </View>
+
+      {/* Previsão de Parcelas para Rascunho */}
+      {sale.status === 'draft' ? (
+        <View style={styles.card}>
+          <View style={styles.sectionHeaderCol}>
+            <Text style={styles.sectionTitle}>
+              Condição prevista ({draftInstallmentPreview.length}{' '}
+              {draftInstallmentPreview.length === 1 ? 'parcela' : 'parcelas'})
+            </Text>
+            <Text style={styles.snapshotHint}>
+              {SALE_PAYMENT_MODE_LABELS[sale.payment_mode ?? 'cash']} •{' '}
+              {PAYMENT_METHOD_LABELS[sale.payment_method ?? 'pix']} (serão geradas ao confirmar a venda)
+            </Text>
+          </View>
+
+          <View style={styles.itemsList}>
+            {draftInstallmentPreview.map((preview) => (
+              <View
+                key={`draft_prev_${preview.installmentNumber}_${preview.dueDateISO}`}
+                style={styles.installmentRow}
+              >
+                <View style={styles.installmentTopRow}>
+                  <View style={styles.itemLeftCol}>
+                    <Text style={styles.itemName}>
+                      {preview.isEntry
+                        ? (sale.payment_mode ?? 'cash') === 'cash'
+                          ? 'Pagamento à vista'
+                          : 'Entrada'
+                        : `Parcela ${preview.installmentNumber}/${preview.totalInstallments}`}
+                    </Text>
+                    <Text style={styles.itemSubMeta}>
+                      Venc. previsto: {formatDateBR(preview.dueDateISO)}
+                    </Text>
+                  </View>
+
+                  <StatusBadge label="Prevista" tone="warning" />
+                </View>
+
+                <View style={styles.installmentBottomRow}>
+                  <View>
+                    <Text style={styles.installmentAmountCaption}>
+                      Valor previsto
+                    </Text>
+                    <MoneyText
+                      cents={preview.amountCents}
+                      size="sm"
+                      tone="primary"
+                    />
+                  </View>
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : null}
 
       {/* Parcelas e Histórico de Recebimentos (RF-050 a RF-057) */}
       {sale.status === 'confirmed' || installments.length > 0 ? (
@@ -512,8 +685,14 @@ export default function SaleDetailScreen() {
                         ) : null}
                       </View>
 
-                      <View style={styles.installmentRightCol}>
-                        <StatusBadge label={meta.label} tone={meta.tone} />
+                      <StatusBadge label={meta.label} tone={meta.tone} />
+                    </View>
+
+                    <View style={styles.installmentBottomRow}>
+                      <View>
+                        <Text style={styles.installmentAmountCaption}>
+                          {isOpen ? 'Saldo a receber' : 'Valor quitado'}
+                        </Text>
                         <MoneyText
                           cents={
                             isOpen
@@ -529,7 +708,29 @@ export default function SaleDetailScreen() {
                                 : 'default'
                           }
                         />
-                        {isOpen ? (
+                      </View>
+
+                      {isOpen ? (
+                        <View style={styles.installmentActionPillsRow}>
+                          {shouldShowInstallmentWhatsAppCharge(
+                            sale.payment_method,
+                          ) ? (
+                            <Pressable
+                              accessibilityRole="button"
+                              onPress={() => handleSendInstallmentWhatsApp(inst)}
+                              style={styles.whatsAppPillButton}
+                            >
+                              <Ionicons
+                                name="logo-whatsapp"
+                                size={14}
+                                color={colors.primaryDark}
+                              />
+                              <Text style={styles.whatsAppPillText}>
+                                {meta.state === 'overdue' ? 'Cobrar' : 'Lembrar'}
+                              </Text>
+                            </Pressable>
+                          ) : null}
+
                           <Pressable
                             accessibilityRole="button"
                             onPress={() => {
@@ -545,8 +746,8 @@ export default function SaleDetailScreen() {
                             />
                             <Text style={styles.receivePillText}>Receber</Text>
                           </Pressable>
-                        ) : null}
-                      </View>
+                        </View>
+                      ) : null}
                     </View>
                   </View>
                 );
@@ -1054,6 +1255,55 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.text,
   },
+  whatsAppBannerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.primary,
+    borderRadius: radius.control,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    gap: spacing.sm,
+  },
+  whatsAppBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    flex: 1,
+  },
+  whatsAppBannerTextCol: {
+    flex: 1,
+    gap: 1,
+  },
+  whatsAppBannerTitle: {
+    ...typography.bodyStrong,
+    color: colors.white,
+  },
+  whatsAppBannerSubtitle: {
+    ...typography.caption,
+    color: 'rgba(255, 255, 255, 0.88)',
+  },
+  installmentActionPillsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  whatsAppPillButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+  },
+  whatsAppPillText: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: colors.primaryDark,
+  },
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1093,13 +1343,27 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.md,
-    gap: spacing.xs,
+    gap: spacing.sm,
   },
   installmentTopRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: spacing.sm,
+  },
+  installmentBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    paddingTop: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    gap: spacing.sm,
+  },
+  installmentAmountCaption: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginBottom: 1,
   },
   installmentRightCol: {
     alignItems: 'flex-end',

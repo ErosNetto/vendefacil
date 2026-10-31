@@ -6,6 +6,7 @@ import { AppHeader, Screen, SecondaryButton, StatusBadge } from '@/components/ui
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
 import { FinanceSettingsCard } from '@/features/finance/FinanceSettingsCard';
+import { PixSettingsCard } from '@/features/whatsapp/PixSettingsCard';
 import { getRoleLabelPtBR } from '@/features/workspace/schemas';
 import { formatDateBR } from '@/utils/formatters';
 
@@ -104,10 +105,16 @@ export default function SettingsScreen() {
       </View>
 
       {activeWorkspace ? (
-        <FinanceSettingsCard
-          workspace={activeWorkspace.workspace}
-          onUpdated={refreshWorkspaceContext}
-        />
+        <>
+          <PixSettingsCard
+            workspace={activeWorkspace.workspace}
+            onUpdated={refreshWorkspaceContext}
+          />
+          <FinanceSettingsCard
+            workspace={activeWorkspace.workspace}
+            onUpdated={refreshWorkspaceContext}
+          />
+        </>
       ) : null}
 
       {workspaces.length > 1 ? (

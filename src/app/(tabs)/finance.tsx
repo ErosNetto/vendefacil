@@ -28,6 +28,7 @@ import {
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
+import { listWorkspaceCustomers } from '@/features/customers/services';
 import { FinanceSettingsCard } from '@/features/finance/FinanceSettingsCard';
 import { ReceivePaymentModal } from '@/features/finance/ReceivePaymentModal';
 import {
@@ -42,8 +43,23 @@ import {
   getWorkspaceReceivablesOverview,
   type ReceivableFilterKey,
 } from '@/features/finance/services';
-import type { InstallmentRow, PaymentRow } from '@/types/database';
+import { PixSettingsCard } from '@/features/whatsapp/PixSettingsCard';
+import {
+  buildSmartInstallmentWhatsAppMessage,
+  shouldShowInstallmentWhatsAppCharge,
+} from '@/features/whatsapp/schemas';
+import {
+  openWhatsAppWithMessage,
+  useWorkspacePixSettings,
+} from '@/features/whatsapp/services';
 import { useDebounce } from '@/hooks';
+import { supabase } from '@/lib/supabase';
+import type {
+  InstallmentRow,
+  PaymentMethod,
+  PaymentRow,
+  SaleRow,
+} from '@/types/database';
 import { formatCentsToBRL, formatDateBR } from '@/utils/formatters';
 
 const FILTER_OPTIONS: readonly {
@@ -61,16 +77,20 @@ interface InstallmentCardItemProps {
   item: InstallmentRow;
   todayISO: string;
   financeSettings: WorkspaceFinanceSettings;
+  paymentMethod?: PaymentMethod | null;
   onPressSale: (saleId: string) => void;
   onPressReceive: (item: InstallmentRow) => void;
+  onPressWhatsApp: (item: InstallmentRow) => void;
 }
 
 const InstallmentCardItem = memo(function InstallmentCardItem({
   item,
   todayISO,
   financeSettings,
+  paymentMethod,
   onPressSale,
   onPressReceive,
+  onPressWhatsApp,
 }: InstallmentCardItemProps) {
   const meta = getInstallmentDisplayMeta(item, todayISO);
   const isOpen = item.status !== 'paid' && item.remaining_principal_cents > 0;
@@ -187,14 +207,33 @@ const InstallmentCardItem = memo(function InstallmentCardItem({
         </Pressable>
 
         {isOpen ? (
-          <Pressable
-            onPress={() => onPressReceive(item)}
-            accessibilityRole="button"
-            style={styles.receiveActionBtn}
-          >
-            <Ionicons name="cash-outline" size={16} color={colors.surface} />
-            <Text style={styles.receiveActionBtnText}>Receber</Text>
-          </Pressable>
+          <View style={styles.cardFooterRightActions}>
+            {shouldShowInstallmentWhatsAppCharge(paymentMethod) ? (
+              <Pressable
+                onPress={() => onPressWhatsApp(item)}
+                accessibilityRole="button"
+                style={styles.whatsAppActionBtn}
+              >
+                <Ionicons
+                  name="logo-whatsapp"
+                  size={15}
+                  color={colors.primaryDark}
+                />
+                <Text style={styles.whatsAppActionBtnText}>
+                  {meta.state === 'overdue' ? 'Cobrar' : 'Lembrar'}
+                </Text>
+              </Pressable>
+            ) : null}
+
+            <Pressable
+              onPress={() => onPressReceive(item)}
+              accessibilityRole="button"
+              style={styles.receiveActionBtn}
+            >
+              <Ionicons name="cash-outline" size={16} color={colors.surface} />
+              <Text style={styles.receiveActionBtnText}>Receber</Text>
+            </Pressable>
+          </View>
         ) : null}
       </View>
     </View>
@@ -256,9 +295,17 @@ export default function FinanceTabScreen() {
     () => getWorkspaceFinanceSettings(workspace),
     [workspace],
   );
+  const { pixSettings, refreshPixSettings } =
+    useWorkspacePixSettings(workspace);
 
   const [installments, setInstallments] = useState<InstallmentRow[]>([]);
   const [recentPayments, setRecentPayments] = useState<PaymentRow[]>([]);
+  const [customerPhones, setCustomerPhones] = useState<Record<string, string>>(
+    {},
+  );
+  const [salePaymentMethods, setSalePaymentMethods] = useState<
+    Record<string, PaymentMethod>
+  >({});
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebounce(searchQuery, 300);
   const [filterMode, setFilterMode] =
@@ -288,9 +335,37 @@ export default function FinanceTabScreen() {
     setErrorMessage(null);
 
     try {
-      const overview = await getWorkspaceReceivablesOverview(workspaceId);
+      const [overview, customers, salesRes] = await Promise.all([
+        getWorkspaceReceivablesOverview(workspaceId),
+        listWorkspaceCustomers(workspaceId).catch(() => []),
+        supabase
+          .from('sales')
+          .select('id, payment_method')
+          .eq('workspace_id', workspaceId),
+      ]);
       setInstallments(overview.installments);
       setRecentPayments(overview.recentPayments);
+
+      const phoneMap: Record<string, string> = {};
+      for (const cust of customers) {
+        if (cust.phone) {
+          phoneMap[cust.id] = cust.phone;
+        }
+      }
+      setCustomerPhones(phoneMap);
+
+      const methodMap: Record<string, PaymentMethod> = {};
+      if (salesRes.data) {
+        for (const s of salesRes.data as Pick<
+          SaleRow,
+          'id' | 'payment_method'
+        >[]) {
+          if (s.payment_method) {
+            methodMap[s.id] = s.payment_method;
+          }
+        }
+      }
+      setSalePaymentMethods(methodMap);
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -442,6 +517,31 @@ export default function FinanceTabScreen() {
     setSelectedInstallment(item);
   }, []);
 
+  const handlePressWhatsApp = useCallback(
+    (item: InstallmentRow) => {
+      const phone = item.customer_id
+        ? (customerPhones[item.customer_id] ?? null)
+        : null;
+      const message = buildSmartInstallmentWhatsAppMessage({
+        workspaceName: workspace?.name ?? 'Loja',
+        installment: item,
+        financeSettings,
+        paymentMethod: salePaymentMethods[item.sale_id],
+        todayISO,
+        pix: pixSettings,
+      });
+      void openWhatsAppWithMessage({ phone, message });
+    },
+    [
+      customerPhones,
+      workspace?.name,
+      financeSettings,
+      salePaymentMethods,
+      todayISO,
+      pixSettings,
+    ],
+  );
+
   const keyExtractor = useCallback((item: InstallmentRow) => item.id, []);
 
   const renderItem = useCallback(
@@ -450,11 +550,20 @@ export default function FinanceTabScreen() {
         item={item}
         todayISO={todayISO}
         financeSettings={financeSettings}
+        paymentMethod={salePaymentMethods[item.sale_id]}
         onPressSale={handlePressSale}
         onPressReceive={handlePressReceive}
+        onPressWhatsApp={handlePressWhatsApp}
       />
     ),
-    [todayISO, financeSettings, handlePressSale, handlePressReceive],
+    [
+      todayISO,
+      financeSettings,
+      salePaymentMethods,
+      handlePressSale,
+      handlePressReceive,
+      handlePressWhatsApp,
+    ],
   );
 
   const listHeader = useMemo(
@@ -472,13 +581,22 @@ export default function FinanceTabScreen() {
         ) : null}
 
         {showRulesCard && workspace ? (
-          <FinanceSettingsCard
-            workspace={workspace}
-            onUpdated={async () => {
-              await refreshWorkspaceContext();
-              await loadFinanceData();
-            }}
-          />
+          <>
+            <PixSettingsCard
+              workspace={workspace}
+              onUpdated={async () => {
+                await refreshPixSettings();
+                await refreshWorkspaceContext();
+              }}
+            />
+            <FinanceSettingsCard
+              workspace={workspace}
+              onUpdated={async () => {
+                await refreshWorkspaceContext();
+                await loadFinanceData();
+              }}
+            />
+          </>
         ) : null}
 
         <View style={styles.quickNavRow}>
@@ -564,6 +682,7 @@ export default function FinanceTabScreen() {
       showRulesCard,
       workspace,
       refreshWorkspaceContext,
+      refreshPixSettings,
       metrics,
       searchQuery,
       filterMode,
@@ -693,7 +812,7 @@ export default function FinanceTabScreen() {
         subtitle={workspace?.name ?? 'Contas a receber e caixa'}
         rightSlot={
           <SecondaryButton
-            label={showRulesCard ? 'Ocultar regras' : 'Regras de juros'}
+            label={showRulesCard ? 'Ocultar PIX/Regras' : 'PIX e Juros'}
             iconName="options-outline"
             onPress={() => setShowRulesCard((prev) => !prev)}
           />
@@ -939,6 +1058,27 @@ const styles = StyleSheet.create({
   receiveActionBtnText: {
     ...typography.caption,
     color: colors.surface,
+    fontWeight: '700',
+  },
+  cardFooterRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  whatsAppActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 1,
+    borderRadius: radius.pill,
+  },
+  whatsAppActionBtnText: {
+    ...typography.caption,
+    color: colors.primaryDark,
     fontWeight: '700',
   },
   loadMoreWrap: {
