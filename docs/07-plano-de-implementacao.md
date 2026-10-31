@@ -74,11 +74,11 @@
 - [x] Leitor de código de barras via câmera (`expo-camera`, `BarcodeScannerModal`) com preenchimento inteligente de dados em cascata (Catálogo próprio, Open Beauty Facts, Open Products Facts, Open Food Facts e UPCitemdb) no cadastro de produto + adição/seleção rápida com Toast flutuante (`ToastOverlay`) na Nova Venda e no Movimentar Estoque (`src/components/ui/BarcodeScannerModal.tsx`, `src/components/ui/Toast.tsx`, `src/features/products/barcodeLookupService.ts`, `src/features/products/ProductForm.tsx`).
 
 ## Fase 9 — APK
-- [ ] Testes RLS e fluxos ponta a ponta.
-- [ ] Acessibilidade/performance.
-- [ ] Ícone/splash/configuração Android.
-- [ ] EAS Build APK de preview.
+- [x] Testes RLS e fluxos ponta a ponta (`supabase/tests/phase9_final_rls_and_pricing_test.sql` + 74 testes automatizados com Vitest).
+- [x] Acessibilidade/performance (`touchTarget`, `accessibilityRole`, paginação, debounce e memoização).
+- [x] Ícone/splash/configuração Android (`assets/icon.png`, `assets/adaptive-icon.png`, `assets/splash-icon.png`, `app.json` e `eas.json`).
+- [x] EAS Build APK de preview (`@erosnettoantunes/vendefacil`, `projectId: 5f7bf571-cebd-4e03-ac55-992321179d74`).
 - [ ] Instalar e testar em aparelho real.
-- [ ] Documentar backup.
+- [x] Documentar backup (`docs/09-build-apk.md`).
 
 Não marcar tarefa concluída sem implementar e verificar. Atualizar este checklist após cada fase.

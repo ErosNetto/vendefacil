@@ -2,15 +2,26 @@
   "expo": {
     "name": "VendeFácil",
     "slug": "vendefacil",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "scheme": "vendefacil",
     "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#087F5B"
+    },
     "android": {
       "package": "br.com.vendefacil.app",
       "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#087F5B"
-      }
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "ios": {
       "supportsTablet": true,
@@ -27,6 +38,9 @@
       [
         "expo-splash-screen",
         {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
           "backgroundColor": "#087F5B"
         }
       ],
@@ -37,7 +51,25 @@
         {
           "cameraPermission": "O VendeFácil precisa acessar a câmera para ler códigos de barras e fotografar produtos."
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "O VendeFácil precisa acessar a galeria para anexar fotos aos produtos.",
+          "cameraPermission": "O VendeFácil precisa acessar a câmera para fotografar produtos."
+        }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "5f7bf571-cebd-4e03-ac55-992321179d74"
+      }
+    },
+    "owner": "erosnettoantunes"
   }
 }
