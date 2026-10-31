@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  BARCODE_LOOKUP_PROVIDERS,
   base64ToUint8Array,
   buildProductImageStoragePath,
   calculateProfitMarginPercent,
   categoryFormSchema,
+  extractProductMetadataFromOpenFacts,
   filterProducts,
   productFormSchema,
   validateProductImageCandidate,
@@ -156,5 +158,40 @@ describe('filterProducts', () => {
         (p) => p.name,
       ),
     ).toEqual(['Natura Tododia Hidratante']);
+  });
+});
+
+describe('barcodeLookupService helpers', () => {
+  it('mantém todas as 4 bases públicas (Beauty, Products, Food e UPCitemdb) ativas por padrão', () => {
+    const enabledIds = BARCODE_LOOKUP_PROVIDERS.filter(
+      (p) => p.enabledByDefault,
+    ).map((p) => p.id);
+    expect(enabledIds).toEqual([
+      'open_beauty_facts',
+      'open_products_facts',
+      'open_food_facts',
+      'upcitemdb',
+    ]);
+  });
+
+  it('extrai nome, volume, marca e descrição do payload Open Facts', () => {
+    const metadata = extractProductMetadataFromOpenFacts({
+      status: 1,
+      product: {
+        product_name_pt: 'Kaiak Masculino',
+        generic_name_pt: 'Desodorante Colônia',
+        brands: 'Natura, Natura Cosméticos',
+        quantity: '100 ml',
+        categories: 'Perfumes, Perfumaria Masculina',
+      },
+    });
+
+    expect(metadata).toEqual({
+      name: 'Kaiak Masculino 100 ml',
+      brand: 'Natura',
+      description:
+        'Desodorante Colônia • Volume/Peso: 100 ml • Categoria ref.: Perfumes, Perfumaria Masculina',
+      categoryTerms: ['Perfumes', 'Perfumaria Masculina'],
+    });
   });
 });

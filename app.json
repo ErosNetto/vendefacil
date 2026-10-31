@@ -31,7 +31,13 @@
         }
       ],
       "expo-image",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "O VendeFácil precisa acessar a câmera para ler códigos de barras e fotografar produtos."
+        }
+      ]
     ]
   }
 }

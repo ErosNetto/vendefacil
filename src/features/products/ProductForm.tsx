@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
   Pressable,
@@ -12,12 +14,17 @@ import {
 } from 'react-native';
 
 import {
+  BarcodeScannerModal,
   FormField,
   PrimaryButton,
   SecondaryButton,
   StatusBadge,
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/constants/theme';
+import {
+  type BarcodeLookupResult,
+  lookupProductByBarcode,
+} from '@/features/products/barcodeLookupService';
 import {
   getSignedProductImageUrl,
   pickAndOptimizeProductImage,
@@ -62,6 +69,7 @@ export function ProductForm({
   onSubmit,
   onCancel,
 }: ProductFormProps) {
+  const router = useRouter();
   const [name, setName] = useState(initialValues?.name ?? '');
   const [categoryId, setCategoryId] = useState<string>(
     initialValues?.categoryId ?? '',
@@ -90,6 +98,11 @@ export function ProductForm({
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryError, setNewCategoryError] = useState<string | null>(null);
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+
+  const [scannerModalOpen, setScannerModalOpen] = useState(false);
+  const [isLookingUpBarcode, setIsLookingUpBarcode] = useState(false);
+  const [barcodeLookupFeedback, setBarcodeLookupFeedback] =
+    useState<BarcodeLookupResult | null>(null);
 
   const [fieldErrors, setFieldErrors] = useState<{
     name?: string;
@@ -164,6 +177,52 @@ export function ProductForm({
     setPreparedImage(null);
     if (existingImagePath) {
       setRemoveExistingImage(true);
+    }
+  }
+
+  async function handleBarcodeResolved(scannedCode: string): Promise<void> {
+    setScannerModalOpen(false);
+    const cleaned = scannedCode.trim();
+    if (!cleaned) {
+      return;
+    }
+
+    setBarcode(cleaned);
+    setFieldErrors((prev) => ({ ...prev, barcode: undefined }));
+    setIsLookingUpBarcode(true);
+    setBarcodeLookupFeedback(null);
+
+    try {
+      const result = await lookupProductByBarcode(cleaned, { workspaceId });
+      setBarcodeLookupFeedback(result);
+
+      if (result.source === 'external' && result.found) {
+        if (result.name) {
+          setName(result.name);
+          setFieldErrors((prev) => ({ ...prev, name: undefined }));
+        }
+        if (result.brand) {
+          setBrand(result.brand);
+          setFieldErrors((prev) => ({ ...prev, brand: undefined }));
+        }
+        if (result.description && !description.trim()) {
+          setDescription(result.description);
+        }
+        if (!categoryId && result.SuggestedCategoryTerms.length > 0) {
+          const matchedCat = categories.find((cat) =>
+            result.SuggestedCategoryTerms.some(
+              (term) =>
+                term.toLowerCase().includes(cat.name.toLowerCase()) ||
+                cat.name.toLowerCase().includes(term.toLowerCase()),
+            ),
+          );
+          if (matchedCat) {
+            setCategoryId(matchedCat.id);
+          }
+        }
+      }
+    } finally {
+      setIsLookingUpBarcode(false);
     }
   }
 
@@ -257,6 +316,165 @@ export function ProductForm({
           <Text style={styles.errorAlertText}>{submitError}</Text>
         </View>
       ) : null}
+
+      <View style={styles.barcodeHeroBanner}>
+        <View style={styles.barcodeHeroTopRow}>
+          <View style={styles.barcodeHeroIconBox}>
+            <Ionicons
+              name="barcode-outline"
+              size={22}
+              color={colors.primaryDark}
+            />
+          </View>
+          <View style={styles.barcodeHeroTextCol}>
+            <Text style={styles.barcodeHeroTitle}>
+              Preenchimento por Código de Barras
+            </Text>
+            <Text style={styles.barcodeHeroSubtitle}>
+              Aponte a câmera para ler o EAN e buscar nome, marca e detalhes
+              automaticamente.
+            </Text>
+          </View>
+        </View>
+
+        <Pressable
+          accessibilityRole="button"
+          disabled={isSubmitting || isLookingUpBarcode}
+          onPress={() => setScannerModalOpen(true)}
+          style={[
+            styles.barcodeHeroScanBtn,
+            isLookingUpBarcode ? styles.buttonDisabled : null,
+          ]}
+        >
+          {isLookingUpBarcode ? (
+            <>
+              <ActivityIndicator size="small" color={colors.white} />
+              <Text style={styles.barcodeHeroScanBtnText}>
+                Buscando dados do código...
+              </Text>
+            </>
+          ) : (
+            <>
+              <Ionicons name="scan-outline" size={18} color={colors.white} />
+              <Text style={styles.barcodeHeroScanBtnText}>
+                Escanear código de barras com a câmera
+              </Text>
+            </>
+          )}
+        </Pressable>
+
+        {isLookingUpBarcode ? (
+          <View style={styles.lookupStatusBox}>
+            <ActivityIndicator size="small" color={colors.primaryDark} />
+            <Text style={styles.lookupStatusText}>
+              Buscando informações do código {barcode} nas bases de produtos...
+            </Text>
+          </View>
+        ) : barcodeLookupFeedback ? (
+          barcodeLookupFeedback.source === 'workspace_catalog' &&
+          barcodeLookupFeedback.existingWorkspaceProduct ? (
+            <View style={styles.lookupCatalogBox}>
+              <View style={styles.lookupFeedbackHeader}>
+                <Ionicons
+                  name="information-circle"
+                  size={18}
+                  color="#1864AB"
+                />
+                <Text style={styles.lookupCatalogTitle}>
+                  Código {barcodeLookupFeedback.barcode} já existe no seu
+                  catálogo
+                </Text>
+              </View>
+              <Text style={styles.lookupCatalogBody}>
+                Produto encontrado:{' '}
+                <Text style={styles.lookupStrong}>
+                  {barcodeLookupFeedback.existingWorkspaceProduct.name}
+                </Text>
+              </Text>
+              <View style={styles.lookupActionsRow}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() =>
+                    router.push(
+                      `/products/${barcodeLookupFeedback.existingWorkspaceProduct!.id}`,
+                    )
+                  }
+                  style={styles.lookupActionPill}
+                >
+                  <Ionicons
+                    name="open-outline"
+                    size={14}
+                    color={colors.primaryDark}
+                  />
+                  <Text style={styles.lookupActionPillText}>
+                    Abrir produto existente
+                  </Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => {
+                    const existing =
+                      barcodeLookupFeedback.existingWorkspaceProduct!;
+                    setName(existing.name);
+                    setBrand(existing.brand ?? '');
+                    setDescription(existing.description ?? '');
+                    if (existing.category_id) {
+                      setCategoryId(existing.category_id);
+                    }
+                  }}
+                  style={styles.lookupActionPill}
+                >
+                  <Ionicons
+                    name="copy-outline"
+                    size={14}
+                    color={colors.primaryDark}
+                  />
+                  <Text style={styles.lookupActionPillText}>
+                    Usar nome/marca mesmo assim
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : barcodeLookupFeedback.source === 'external' &&
+            barcodeLookupFeedback.found ? (
+            <View style={styles.lookupSuccessBox}>
+              <View style={styles.lookupFeedbackHeader}>
+                <Ionicons
+                  name="checkmark-circle"
+                  size={18}
+                  color="#2B8A3E"
+                />
+                <Text style={styles.lookupSuccessTitle}>
+                  Produto e código encontrados ({barcodeLookupFeedback.providerLabel})!
+                </Text>
+              </View>
+              <Text style={styles.lookupSuccessBody}>
+                Código <Text style={styles.lookupStrong}>{barcodeLookupFeedback.barcode}</Text>{' '}
+                localizado na base online. Nome e marca foram preenchidos
+                automaticamente — informe apenas seu preço de venda e custo.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.lookupWarningBox}>
+              <View style={styles.lookupFeedbackHeader}>
+                <Ionicons
+                  name="alert-circle"
+                  size={18}
+                  color="#B45309"
+                />
+                <Text style={styles.lookupWarningTitle}>
+                  Código {barcodeLookupFeedback.barcode} lido • Produto não
+                  encontrado na internet
+                </Text>
+              </View>
+              <Text style={styles.lookupWarningBody}>
+                O código de barras já foi preenchido! Como este item ainda não
+                consta nas bases públicas, preencha o nome e os preços abaixo.
+              </Text>
+            </View>
+          )
+        ) : null}
+      </View>
 
       <Text style={styles.sectionLabel}>Foto do produto (Bucket Privado)</Text>
       <View style={styles.imagePickerCard}>
@@ -470,9 +688,67 @@ export function ProductForm({
         keyboardType="numeric"
         leftIcon="barcode-outline"
         value={barcode}
-        onChangeText={setBarcode}
+        onChangeText={(val) => {
+          setBarcode(val);
+          setFieldErrors((prev) => ({ ...prev, barcode: undefined }));
+        }}
         errorMessage={fieldErrors.barcode}
-        editable={!isSubmitting}
+        editable={!isSubmitting && !isLookingUpBarcode}
+        rightSlot={
+          <View style={styles.barcodeFieldActions}>
+            {barcode.trim().length >= 6 || isLookingUpBarcode ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Buscar dados do código de barras"
+                disabled={isSubmitting || isLookingUpBarcode}
+                onPress={() => {
+                  void handleBarcodeResolved(barcode);
+                }}
+                style={[
+                  styles.barcodeInlineSecondaryBtn,
+                  isLookingUpBarcode ? styles.buttonDisabled : null,
+                ]}
+              >
+                {isLookingUpBarcode ? (
+                  <>
+                    <ActivityIndicator
+                      size="small"
+                      color={colors.primaryDark}
+                      style={styles.inlineSpinner}
+                    />
+                    <Text style={styles.barcodeInlineSecondaryText}>
+                      Buscando...
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons
+                      name="search-outline"
+                      size={14}
+                      color={colors.primaryDark}
+                    />
+                    <Text style={styles.barcodeInlineSecondaryText}>
+                      Buscar
+                    </Text>
+                  </>
+                )}
+              </Pressable>
+            ) : null}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Escanear código de barras com a câmera"
+              disabled={isSubmitting || isLookingUpBarcode}
+              onPress={() => setScannerModalOpen(true)}
+              style={[
+                styles.barcodeInlinePrimaryBtn,
+                isLookingUpBarcode ? styles.buttonDisabled : null,
+              ]}
+            >
+              <Ionicons name="scan-outline" size={14} color={colors.white} />
+              <Text style={styles.barcodeInlinePrimaryText}>Ler</Text>
+            </Pressable>
+          </View>
+        }
       />
 
       <FormField
@@ -504,6 +780,16 @@ export function ProductForm({
           disabled={isSubmitting}
         />
       </View>
+
+      <BarcodeScannerModal
+        visible={scannerModalOpen}
+        title="Escanear produto"
+        subtitle="Aponte a câmera para o código de barras da embalagem"
+        onScanned={(scannedCode) => {
+          void handleBarcodeResolved(scannedCode);
+        }}
+        onClose={() => setScannerModalOpen(false)}
+      />
 
       <Modal
         visible={newCategoryModalOpen}
@@ -566,6 +852,197 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.error,
     flex: 1,
+  },
+  barcodeHeroBanner: {
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    padding: spacing.md,
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  barcodeHeroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  barcodeHeroIconBox: {
+    width: 42,
+    height: 42,
+    borderRadius: radius.control,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  barcodeHeroTextCol: {
+    flex: 1,
+    gap: 2,
+  },
+  barcodeHeroTitle: {
+    ...typography.bodyStrong,
+    color: colors.primaryDark,
+  },
+  barcodeHeroSubtitle: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  barcodeHeroScanBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.primary,
+    borderRadius: radius.control,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  barcodeHeroScanBtnText: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: colors.white,
+  },
+  lookupStatusBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: radius.control,
+    padding: spacing.sm,
+  },
+  lookupStatusText: {
+    ...typography.caption,
+    color: colors.primaryDark,
+    flex: 1,
+  },
+  lookupSuccessBox: {
+    backgroundColor: '#EBFBEE',
+    borderRadius: radius.control,
+    borderWidth: 1.5,
+    borderColor: '#2B8A3E',
+    padding: spacing.md,
+    gap: 4,
+  },
+  lookupWarningBox: {
+    backgroundColor: '#FFF4E6',
+    borderRadius: radius.control,
+    borderWidth: 1.5,
+    borderColor: '#D97706',
+    padding: spacing.md,
+    gap: 6,
+  },
+  lookupCatalogBox: {
+    backgroundColor: '#E7F5FF',
+    borderRadius: radius.control,
+    borderWidth: 1.5,
+    borderColor: '#1971C2',
+    padding: spacing.md,
+    gap: 6,
+  },
+  lookupFeedbackHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  lookupSuccessTitle: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: '#2B8A3E',
+    flex: 1,
+  },
+  lookupSuccessBody: {
+    ...typography.caption,
+    color: '#237032',
+  },
+  lookupWarningTitle: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: '#B45309',
+    flex: 1,
+  },
+  lookupWarningBody: {
+    ...typography.caption,
+    color: '#92400E',
+  },
+  lookupCatalogTitle: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: '#1864AB',
+    flex: 1,
+  },
+  lookupCatalogBody: {
+    ...typography.caption,
+    color: '#1971C2',
+  },
+  lookupStrong: {
+    fontWeight: '700',
+    color: colors.text,
+  },
+  lookupActionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginTop: 2,
+  },
+  lookupActionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.surface,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+  },
+  lookupActionPillText: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.primaryDark,
+  },
+  barcodeFieldActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  barcodeInlineSecondaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  barcodeInlineSecondaryText: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: colors.primaryDark,
+  },
+  barcodeInlinePrimaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primary,
+  },
+  barcodeInlinePrimaryText: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: colors.white,
+  },
+  inlineSpinner: {
+    transform: [{ scale: 0.78 }],
+  },
+  buttonDisabled: {
+    opacity: 0.7,
   },
   sectionLabel: {
     ...typography.bodyStrong,

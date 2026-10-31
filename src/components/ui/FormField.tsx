@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { type ComponentRef, useRef, useState } from 'react';
+import { type ComponentRef, type ReactNode, useRef, useState } from 'react';
 import {
   Pressable,
   StyleSheet,
@@ -18,6 +18,7 @@ export interface FormFieldProps extends TextInputProps {
   helperText?: string;
   leftIcon?: keyof typeof Ionicons.glyphMap;
   isPassword?: boolean;
+  rightSlot?: ReactNode;
 }
 
 export function FormField({
@@ -26,6 +27,7 @@ export function FormField({
   helperText,
   leftIcon,
   isPassword = false,
+  rightSlot,
   style,
   onFocus,
   ...inputProps
@@ -37,7 +39,7 @@ export function FormField({
 
   return (
     <View ref={wrapperRef} collapsable={false} style={styles.wrapper}>
-      <Text style={styles.label}>{label}</Text>
+      {label ? <Text style={styles.label}>{label}</Text> : null}
       <View style={[styles.inputContainer, hasError ? styles.inputError : null]}>
         {leftIcon ? (
           <Ionicons
@@ -58,6 +60,7 @@ export function FormField({
           }}
           {...inputProps}
         />
+        {rightSlot ? <View style={styles.rightSlotWrap}>{rightSlot}</View> : null}
         {isPassword ? (
           <Pressable
             onPress={() => setPasswordVisible((prev) => !prev)}
@@ -122,6 +125,12 @@ const styles = StyleSheet.create({
   },
   eyeButton: {
     padding: spacing.xs,
+    marginLeft: spacing.xs,
+  },
+  rightSlotWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
     marginLeft: spacing.xs,
   },
   errorRow: {

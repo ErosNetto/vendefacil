@@ -13,6 +13,7 @@ import {
 
 import {
   AppHeader,
+  BarcodeScannerModal,
   DatePickerField,
   EmptyState,
   ErrorState,
@@ -24,6 +25,8 @@ import {
   SearchField,
   SecondaryButton,
   StatusBadge,
+  ToastOverlay,
+  useToast,
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
@@ -98,6 +101,8 @@ export default function NewSaleScreen() {
   const [editingPriceError, setEditingPriceError] = useState<string | null>(
     null,
   );
+  const [scannerModalOpen, setScannerModalOpen] = useState(false);
+  const { toast, showToast, hideToast } = useToast();
   const [isAddingProduct, setIsAddingProduct] = useState(
     !params.productId && !params.draftSaleId,
   );
@@ -348,10 +353,42 @@ export default function NewSaleScreen() {
         (p) =>
           p.name.toLowerCase().includes(q) ||
           (p.sku && p.sku.toLowerCase().includes(q)) ||
+          (p.barcode && p.barcode.toLowerCase().includes(q)) ||
           (p.brand && p.brand.toLowerCase().includes(q)),
       )
       .slice(0, 12);
   }, [productSearch, products]);
+
+  function handleBarcodeScannedInSale(rawCode: string): void {
+    setScannerModalOpen(false);
+    const cleaned = rawCode.trim();
+    if (!cleaned) {
+      return;
+    }
+
+    const found = products.find(
+      (p) =>
+        (p.barcode && p.barcode.trim() === cleaned) ||
+        (p.sku && p.sku.trim().toLowerCase() === cleaned.toLowerCase()),
+    );
+
+    if (!found) {
+      showToast({
+        tone: 'warning',
+        title: 'Produto não encontrado',
+        message: `Nenhum produto ativo com o código "${cleaned}" no seu catálogo.`,
+      });
+      return;
+    }
+
+    setCart((prev) => addOrIncrementCartItem(prev, found, 1));
+    setSubmitError(null);
+    showToast({
+      tone: 'success',
+      title: 'Adicionado ao carrinho!',
+      message: `${found.name} (+1 un. • ${formatCentsToBRL(found.price_cents)})`,
+    });
+  }
 
   const discountCents = parseDiscountBRLInput(discountInput) ?? 0;
   const totals = useMemo(
@@ -501,16 +538,17 @@ export default function NewSaleScreen() {
   }
 
   return (
-    <Screen>
-      <AppHeader
-        title={isEditingDraft ? 'Editar rascunho' : 'Nova venda'}
-        subtitle={
-          isEditingDraft
-            ? 'Altere cliente, itens ou desconto antes de confirmar'
-            : 'Carrinho multi-itens com baixa de estoque'
-        }
-        showBack
-      />
+    <>
+      <Screen>
+        <AppHeader
+          title={isEditingDraft ? 'Editar rascunho' : 'Nova venda'}
+          subtitle={
+            isEditingDraft
+              ? 'Altere cliente, itens ou desconto antes de confirmar'
+              : 'Carrinho multi-itens com baixa de estoque'
+          }
+          showBack
+        />
 
       {/* 1. Cliente (Opcional — RF-040) */}
       <View style={styles.card}>
@@ -642,6 +680,33 @@ export default function NewSaleScreen() {
             </Text>
           </Pressable>
         </View>
+
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setScannerModalOpen(true)}
+          style={styles.barcodeScanActionBar}
+        >
+          <View style={styles.barcodeScanActionIconWrap}>
+            <Ionicons
+              name="barcode-outline"
+              size={18}
+              color={colors.primaryDark}
+            />
+          </View>
+          <View style={styles.barcodeScanActionTextCol}>
+            <Text style={styles.barcodeScanActionTitle}>
+              Escanear código de barras
+            </Text>
+            <Text style={styles.barcodeScanActionSub}>
+              Aponte a câmera para adicionar o produto direto ao carrinho
+            </Text>
+          </View>
+          <Ionicons
+            name="scan-outline"
+            size={18}
+            color={colors.primaryDark}
+          />
+        </Pressable>
 
         {cart.length > 0 ? (
           <View style={styles.cartList}>
@@ -1135,6 +1200,14 @@ export default function NewSaleScreen() {
         </View>
       </View>
 
+      <BarcodeScannerModal
+        visible={scannerModalOpen}
+        title="Adicionar produto por código"
+        subtitle="Aponte a câmera para o código de barras do produto para incluí-lo no carrinho"
+        onScanned={handleBarcodeScannedInSale}
+        onClose={() => setScannerModalOpen(false)}
+      />
+
       <Modal
         visible={editingPriceItem !== null}
         transparent
@@ -1302,7 +1375,9 @@ export default function NewSaleScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
-    </Screen>
+      </Screen>
+      <ToastOverlay toast={toast} onDismiss={hideToast} />
+    </>
   );
 }
 
@@ -1321,6 +1396,43 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: spacing.md,
     gap: spacing.sm,
+  },
+  barcodeScanActionBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.controlLg,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  barcodeScanActionIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.control,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  barcodeScanActionTextCol: {
+    flex: 1,
+    gap: 1,
+  },
+  barcodeScanActionTitle: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: colors.primaryDark,
+  },
+  barcodeScanActionSub: {
+    ...typography.caption,
+    fontSize: 12,
+    color: colors.textSecondary,
   },
   sectionTitle: {
     ...typography.section,

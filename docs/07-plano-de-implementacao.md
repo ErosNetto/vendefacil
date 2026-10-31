@@ -71,6 +71,7 @@
 - [x] Melhorias de UX e atualização para Expo SDK 58 (`ScrollToTopButton`, `useScrollToTop`, correção de grade 7 colunas no `DatePickerField`).
 - [x] Central de comunicação WhatsApp e cadastro de PIX do vendedor (`supabase/migrations/20261031000010_workspace_pix_settings.sql`, `src/features/whatsapp/`, comprovante/recibo de venda, orçamento de rascunho com previsão de parcelas, lembretes de vencimento, cobranças em atraso e regras por forma de pagamento em Vendas, Financeiro, Agenda e Clientes).
 - [x] Precificação por remessa na entrada de estoque (custo unitário, novo preço de venda, sugestão de custo médio ponderado e histórico de lotes) + modal de preço unitário negociado no carrinho da Nova Venda (`supabase/migrations/20261031000011_stock_entry_pricing_and_custom_sale_price.sql`, `src/app/inventory/adjust.tsx`, `src/app/inventory/movements.tsx`, `src/app/products/[id]/index.tsx`, `src/app/sales/new.tsx`).
+- [x] Leitor de código de barras via câmera (`expo-camera`, `BarcodeScannerModal`) com preenchimento inteligente de dados em cascata (Catálogo próprio, Open Beauty Facts, Open Products Facts, Open Food Facts e UPCitemdb) no cadastro de produto + adição/seleção rápida com Toast flutuante (`ToastOverlay`) na Nova Venda e no Movimentar Estoque (`src/components/ui/BarcodeScannerModal.tsx`, `src/components/ui/Toast.tsx`, `src/features/products/barcodeLookupService.ts`, `src/features/products/ProductForm.tsx`).
 
 ## Fase 9 — APK
 - [ ] Testes RLS e fluxos ponta a ponta.

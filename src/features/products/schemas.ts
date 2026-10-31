@@ -304,3 +304,143 @@ export function filterProducts(
     return nameMatch || brandMatch || skuMatch || barcodeMatch;
   });
 }
+
+export type BarcodeProviderId =
+  | 'open_beauty_facts'
+  | 'open_products_facts'
+  | 'open_food_facts'
+  | 'upcitemdb';
+
+export interface BarcodeProviderConfig {
+  id: BarcodeProviderId;
+  label: string;
+  baseUrl: string;
+  enabledByDefault: boolean;
+}
+
+/**
+ * Provedores públicos gratuitos para consulta de EAN/GTIN (incluindo códigos brasileiros 789/790).
+ */
+export const BARCODE_LOOKUP_PROVIDERS: readonly BarcodeProviderConfig[] = [
+  {
+    id: 'open_beauty_facts',
+    label: 'Open Beauty Facts (Cosméticos e Perfumaria)',
+    baseUrl: 'https://world.openbeautyfacts.org/api/v2/product',
+    enabledByDefault: true,
+  },
+  {
+    id: 'open_products_facts',
+    label: 'Open Products Facts (Produtos Gerais)',
+    baseUrl: 'https://world.openproductsfacts.org/api/v2/product',
+    enabledByDefault: true,
+  },
+  {
+    id: 'open_food_facts',
+    label: 'Open Food Facts (Alimentos, Bebidas e Suplementos)',
+    baseUrl: 'https://world.openfoodfacts.org/api/v2/product',
+    enabledByDefault: true,
+  },
+  {
+    id: 'upcitemdb',
+    label: 'UPCitemdb (Catálogo Global EAN/UPC)',
+    baseUrl: 'https://api.upcitemdb.com/prod/trial/lookup',
+    enabledByDefault: true,
+  },
+] as const;
+
+export function sanitizeBarcodeDigits(raw: string): string {
+  return raw.trim().replace(/\s+/g, '');
+}
+
+export interface OpenFactsProductPayload {
+  status?: number;
+  product?: {
+    product_name_pt?: string;
+    product_name?: string;
+    generic_name_pt?: string;
+    generic_name?: string;
+    brands?: string;
+    quantity?: string;
+    categories?: string;
+    packaging?: string;
+  };
+}
+
+export function extractProductMetadataFromOpenFacts(
+  payload: OpenFactsProductPayload | null | undefined,
+): {
+  name: string | null;
+  brand: string | null;
+  description: string | null;
+  categoryTerms: string[];
+} | null {
+  if (!payload || payload.status !== 1 || !payload.product) {
+    return null;
+  }
+
+  const prod = payload.product;
+  const rawName = (
+    prod.product_name_pt ||
+    prod.product_name ||
+    prod.generic_name_pt ||
+    prod.generic_name ||
+    ''
+  ).trim();
+
+  const rawQuantity = (prod.quantity || '').trim();
+  let finalName = rawName;
+  if (
+    finalName &&
+    rawQuantity &&
+    !finalName.toLowerCase().includes(rawQuantity.toLowerCase())
+  ) {
+    finalName = `${finalName} ${rawQuantity}`.trim();
+  }
+
+  const rawBrands = (prod.brands || '').trim();
+  const primaryBrand = rawBrands
+    ? (rawBrands
+        .split(',')[0]
+        ?.trim()
+        .slice(0, 80) ?? null)
+    : null;
+
+  if (!finalName && !primaryBrand) {
+    return null;
+  }
+
+  const descriptionParts: string[] = [];
+  const genericName = (prod.generic_name_pt || prod.generic_name || '').trim();
+  if (
+    genericName &&
+    genericName.toLowerCase() !== rawName.toLowerCase()
+  ) {
+    descriptionParts.push(genericName);
+  }
+  if (rawQuantity) {
+    descriptionParts.push(`Volume/Peso: ${rawQuantity}`);
+  }
+  const rawCategories = (prod.categories || '').trim();
+  if (rawCategories) {
+    descriptionParts.push(`Categoria ref.: ${rawCategories}`);
+  }
+
+  const categoryTerms = rawCategories
+    ? rawCategories
+        .split(',')
+        .map((c) => c.trim())
+        .filter((c) => c.length >= 2)
+    : [];
+
+  const description =
+    descriptionParts.length > 0
+      ? descriptionParts.join(' • ').slice(0, 480)
+      : null;
+
+  return {
+    name: finalName ? finalName.slice(0, 120) : null,
+    brand: primaryBrand || null,
+    description,
+    categoryTerms,
+  };
+}

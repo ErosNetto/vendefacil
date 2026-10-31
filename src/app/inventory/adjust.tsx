@@ -6,6 +6,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
   AppHeader,
+  BarcodeScannerModal,
   EmptyState,
   ErrorState,
   FormField,
@@ -15,6 +16,8 @@ import {
   SearchField,
   SecondaryButton,
   StatusBadge,
+  ToastOverlay,
+  useToast,
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
@@ -68,6 +71,8 @@ export default function InventoryAdjustScreen() {
   const [isSelectingProduct, setIsSelectingProduct] = useState(
     !params.productId,
   );
+  const [scannerModalOpen, setScannerModalOpen] = useState(false);
+  const { toast, showToast, hideToast } = useToast();
 
   const initialMovementType: ManualStockMovementType =
     params.movementType &&
@@ -197,10 +202,43 @@ export default function InventoryAdjustScreen() {
         (p) =>
           p.name.toLowerCase().includes(query) ||
           (p.sku && p.sku.toLowerCase().includes(query)) ||
+          (p.barcode && p.barcode.toLowerCase().includes(query)) ||
           (p.brand && p.brand.toLowerCase().includes(query)),
       )
       .slice(0, 15);
   }, [productSearch, products]);
+
+  function handleBarcodeScannedInAdjust(rawCode: string): void {
+    setScannerModalOpen(false);
+    const cleaned = rawCode.trim();
+    if (!cleaned) {
+      return;
+    }
+
+    const found = products.find(
+      (p) =>
+        (p.barcode && p.barcode.trim() === cleaned) ||
+        (p.sku && p.sku.trim().toLowerCase() === cleaned.toLowerCase()),
+    );
+
+    if (!found) {
+      showToast({
+        tone: 'warning',
+        title: 'Produto não encontrado',
+        message: `Nenhum produto ativo com o código "${cleaned}" no seu catálogo.`,
+      });
+      return;
+    }
+
+    setSelectedProductId(found.id);
+    setIsSelectingProduct(false);
+    setFieldErrors((prev) => ({ ...prev, productId: undefined }));
+    showToast({
+      tone: 'success',
+      title: 'Produto selecionado!',
+      message: `${found.name} (Saldo atual: ${Number(found.current_stock_qty ?? 0)} un.)`,
+    });
+  }
 
   const currentStockQty = Number(selectedProduct?.current_stock_qty ?? 0);
   const parsedQty = parsePositiveQuantityInput(quantityInput) ?? 0;
@@ -361,15 +399,43 @@ export default function InventoryAdjustScreen() {
   }
 
   return (
-    <Screen>
-      <AppHeader
-        title="Movimentar estoque"
-        subtitle="Entrada, ajuste ou perda auditável"
-        showBack
-      />
+    <>
+      <Screen>
+        <AppHeader
+          title="Movimentar estoque"
+          subtitle="Entrada, ajuste ou perda auditável"
+          showBack
+        />
 
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>1. Produto</Text>
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>1. Produto</Text>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setScannerModalOpen(true)}
+            style={styles.barcodeScanActionBar}
+          >
+            <View style={styles.barcodeScanActionIconWrap}>
+              <Ionicons
+                name="barcode-outline"
+                size={18}
+                color={colors.primaryDark}
+              />
+            </View>
+            <View style={styles.barcodeScanActionTextCol}>
+              <Text style={styles.barcodeScanActionTitle}>
+                Escanear código de barras
+              </Text>
+              <Text style={styles.barcodeScanActionSub}>
+                Aponte a câmera para selecionar o produto da remessa
+              </Text>
+            </View>
+            <Ionicons
+              name="scan-outline"
+              size={18}
+              color={colors.primaryDark}
+            />
+          </Pressable>
 
         {selectedProduct && !isSelectingProduct ? (
           <View style={styles.selectedProductBox}>
@@ -775,7 +841,17 @@ export default function InventoryAdjustScreen() {
           />
         </View>
       </View>
-    </Screen>
+
+      <BarcodeScannerModal
+        visible={scannerModalOpen}
+        title="Selecionar produto por código"
+        subtitle="Aponte a câmera para o código de barras do produto para selecioná-lo"
+        onScanned={handleBarcodeScannedInAdjust}
+        onClose={() => setScannerModalOpen(false)}
+      />
+      </Screen>
+      <ToastOverlay toast={toast} onDismiss={hideToast} />
+    </>
   );
 }
 
@@ -792,6 +868,43 @@ const styles = StyleSheet.create({
     ...typography.section,
     color: colors.text,
     marginBottom: spacing.md,
+  },
+  barcodeScanActionBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.controlLg,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  barcodeScanActionIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.control,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  barcodeScanActionTextCol: {
+    flex: 1,
+    gap: 1,
+  },
+  barcodeScanActionTitle: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: colors.primaryDark,
+  },
+  barcodeScanActionSub: {
+    ...typography.caption,
+    fontSize: 12,
+    color: colors.textSecondary,
   },
   selectedProductBox: {
     flexDirection: 'row',
