@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ComponentRef } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -18,6 +18,7 @@ import {
   LoadingState,
   PrimaryButton,
   Screen,
+  useScrollToTop,
 } from '@/components/ui';
 import { colors, spacing, typography } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
@@ -148,13 +149,20 @@ export default function NewExpenseScreen() {
     label: cat.name,
   }));
 
+  const { scrollRef, showScrollToTop, handleScroll, scrollToTop } =
+    useScrollToTop<ComponentRef<typeof ScrollView>>();
+
   const paymentMethodChips = PAYMENT_METHOD_OPTIONS.map((opt) => ({
     key: opt.value,
     label: opt.label,
   }));
 
   return (
-    <Screen scroll={false}>
+    <Screen
+      scroll={false}
+      showScrollToTop={showScrollToTop}
+      onScrollToTop={scrollToTop}
+    >
       <AppHeader
         title="Nova despesa"
         subtitle={activeWorkspace?.workspace.name ?? 'Registro de saída'}
@@ -165,6 +173,9 @@ export default function NewExpenseScreen() {
         style={styles.keyboardContainer}
       >
         <ScrollView
+          ref={scrollRef}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >

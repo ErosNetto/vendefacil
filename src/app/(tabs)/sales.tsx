@@ -18,6 +18,7 @@ import {
   SearchField,
   SecondaryButton,
   StatusBadge,
+  useScrollToTop,
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
@@ -30,7 +31,7 @@ import {
 } from '@/features/sales/services';
 import { useDebounce, usePaginatedList } from '@/hooks';
 import type { SaleRow } from '@/types/database';
-import { formatCentsToBRL, formatDateTimeBR } from '@/utils/formatters';
+import { formatCentsToBRL, formatDateBR, formatDateTimeBR } from '@/utils/formatters';
 
 interface SaleCardItemProps {
   sale: SaleRow;
@@ -80,7 +81,7 @@ const SaleCardItem = memo(function SaleCardItem({
             {sale.customer_name_snapshot ?? 'Venda avulsa (Balcão)'}
           </Text>
           <Text style={styles.saleMetaText}>
-            {formatDateTimeBR(sale.created_at)} • {itemCountText}
+            {sale.sale_date ? formatDateBR(sale.sale_date) : formatDateTimeBR(sale.created_at)} • {itemCountText}
           </Text>
         </View>
 
@@ -307,6 +308,9 @@ export default function SalesTabScreen() {
     [router],
   );
 
+  const { scrollRef, showScrollToTop, handleScroll, scrollToTop } =
+    useScrollToTop<FlatList<SaleRow>>();
+
   const keyExtractor = useCallback((item: SaleRow) => item.id, []);
 
   const renderItem = useCallback(
@@ -317,7 +321,11 @@ export default function SalesTabScreen() {
   );
 
   return (
-    <Screen scroll={false}>
+    <Screen
+      scroll={false}
+      showScrollToTop={showScrollToTop}
+      onScrollToTop={scrollToTop}
+    >
       <AppHeader
         title="Vendas"
         subtitle={activeWorkspace?.workspace.name ?? 'Espaço de trabalho'}
@@ -372,6 +380,9 @@ export default function SalesTabScreen() {
         />
       ) : (
         <FlatList
+          ref={scrollRef}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
           data={sales}
           keyExtractor={keyExtractor}
           ListHeaderComponent={listHeader}

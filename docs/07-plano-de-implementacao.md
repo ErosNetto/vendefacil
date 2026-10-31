@@ -64,9 +64,11 @@
 - [x] Testes de datas/timezone e agregação de métricas (`src/features/dashboard/schemas.test.ts`).
 
 ## Fase 8 — Despesas/relatórios
-- [x] Despesas e relatórios (tabelas `expenses` e `expense_categories`, seed RPC, telas `/expenses`, `/expenses/new` e `/reports`).
+- [x] Despesas e relatórios (tabelas `expenses` e `expense_categories`, seed RPC, telas `/expenses`, `/expenses/new`, `/expenses/[id]/edit` e `/reports`).
 - [x] Exportação CSV (DRE, Fluxo de Caixa, Despesas por Categoria e extratos detalhados com UTF-8 BOM para Excel via `Share`).
 - [x] Validar receita vs recebimento vs lucro (fórmula contábil de competência vs regime de caixa, testes unitários de cálculo).
+- [x] Venda com data retroativa (`sale_date` em `supabase/migrations/20261024000009_retroactive_sale_date.sql`, `supabase/tests/retroactive_sale_date_test.sql`, competência em DRE/Dashboard e cálculo de 1º vencimento/pagamento à vista).
+- [x] Melhorias de UX e atualização para Expo SDK 58 (`ScrollToTopButton`, `useScrollToTop`, correção de grade 7 colunas no `DatePickerField`).
 
 ## Fase 9 — APK
 - [ ] Testes RLS e fluxos ponta a ponta.

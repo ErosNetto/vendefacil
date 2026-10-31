@@ -94,9 +94,21 @@ export default function NewSaleScreen() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
   const [downPaymentInput, setDownPaymentInput] = useState('');
   const [installmentCountInput, setInstallmentCountInput] = useState('1');
+  const [saleDateInput, setSaleDateInput] = useState(() =>
+    formatDateBR(new Date()),
+  );
   const [firstDueDateInput, setFirstDueDateInput] = useState(() =>
     formatDateBR(addDaysToISODate(getTodayISODate(), 30)),
   );
+
+  const handleSaleDateChange = useCallback((val: string) => {
+    setSaleDateInput(val);
+    setSubmitError(null);
+    const parsedDate = parseBRDateInputToISO(val);
+    if (parsedDate) {
+      setFirstDueDateInput(formatDateBR(addDaysToISODate(parsedDate, 30)));
+    }
+  }, []);
 
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -162,6 +174,9 @@ export default function NewSaleScreen() {
           );
           if (draftDetail.sale.first_due_date) {
             setFirstDueDateInput(formatDateBR(draftDetail.sale.first_due_date));
+          }
+          if (draftDetail.sale.sale_date) {
+            setSaleDateInput(formatDateBR(draftDetail.sale.sale_date));
           }
 
           const hydratedCart: SaleCartItem[] = draftDetail.items.map((item) => {
@@ -316,6 +331,7 @@ export default function NewSaleScreen() {
       downPaymentInput,
       installmentCountInput,
       firstDueDateInput,
+      saleDateInput,
     });
 
     if (!validation.success || !validation.payload) {
@@ -341,6 +357,7 @@ export default function NewSaleScreen() {
             downPaymentCents: validation.payload.downPaymentCents,
             installmentCount: validation.payload.installmentCount,
             firstDueDateISO: validation.payload.firstDueDateISO,
+            saleDateISO: validation.payload.saleDateISO,
           })
         : await createOrConfirmWorkspaceSale({
             workspaceId,
@@ -355,6 +372,7 @@ export default function NewSaleScreen() {
             downPaymentCents: validation.payload.downPaymentCents,
             installmentCount: validation.payload.installmentCount,
             firstDueDateISO: validation.payload.firstDueDateISO,
+            saleDateISO: validation.payload.saleDateISO,
           });
 
       router.replace(`/sales/${result.sale_id}`);
@@ -726,9 +744,16 @@ export default function NewSaleScreen() {
         ) : null}
       </View>
 
-      {/* 3. Condição de Pagamento e Parcelamento (RF-050 / RF-051) */}
+      {/* 3. Data e Condição de Pagamento (RF-050 / RF-051) */}
       <View style={styles.card}>
-        <Text style={styles.sectionTitle}>3. Condição de pagamento</Text>
+        <Text style={styles.sectionTitle}>3. Data e Condição de pagamento</Text>
+
+        <DatePickerField
+          label="Data da venda *"
+          value={saleDateInput}
+          onChangeDate={handleSaleDateChange}
+          helperText="Padrão: Hoje. Altere para registrar vendas passadas."
+        />
 
         <View style={styles.modeSelectorRow}>
           <Pressable

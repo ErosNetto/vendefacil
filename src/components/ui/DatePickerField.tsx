@@ -125,8 +125,8 @@ export function DatePickerField({
     setIsCalendarOpen(false);
   }
 
-  // Gera dias do mês em exibição
-  const daysInMonth = useMemo(() => {
+  // Gera semanas do mês em exibição (sempre linhas completas de 7 colunas)
+  const weeksInMonth = useMemo(() => {
     const firstDayIndex = new Date(viewYear, viewMonth, 1).getDay();
     const totalDays = new Date(viewYear, viewMonth + 1, 0).getDate();
 
@@ -137,7 +137,15 @@ export function DatePickerField({
     for (let day = 1; day <= totalDays; day += 1) {
       cells.push(day);
     }
-    return cells;
+    while (cells.length % 7 !== 0) {
+      cells.push(null);
+    }
+
+    const weeks: (number | null)[][] = [];
+    for (let i = 0; i < cells.length; i += 7) {
+      weeks.push(cells.slice(i, i + 7));
+    }
+    return weeks;
   }, [viewYear, viewMonth]);
 
   const hasError = Boolean(errorMessage);
@@ -254,58 +262,75 @@ export function DatePickerField({
             {/* Cabeçalho dos Dias da Semana */}
             <View style={styles.weekdaysRow}>
               {WEEKDAY_NAMES_PT_BR.map((w, index) => (
-                <Text key={index} style={styles.weekdayText}>
-                  {w}
-                </Text>
+                <View key={index} style={styles.weekdayCell}>
+                  <Text style={styles.weekdayText}>{w}</Text>
+                </View>
               ))}
             </View>
 
-            {/* Grade de Dias */}
+            {/* Grade de Dias (7 colunas exatas por semana) */}
             <View style={styles.daysGrid}>
-              {daysInMonth.map((dayNum, index) => {
-                if (dayNum === null) {
-                  return <View key={`empty-${index}`} style={styles.dayCell} />;
-                }
-
-                const isSelected =
-                  tempSelectedDate.getDate() === dayNum &&
-                  tempSelectedDate.getMonth() === viewMonth &&
-                  tempSelectedDate.getFullYear() === viewYear;
-
-                const isToday =
-                  new Date().getDate() === dayNum &&
-                  new Date().getMonth() === viewMonth &&
-                  new Date().getFullYear() === viewYear;
-
-                return (
-                  <Pressable
-                    key={`day-${dayNum}`}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: isSelected }}
-                    onPress={() => {
-                      setTempSelectedDate(
-                        new Date(viewYear, viewMonth, dayNum),
+              {weeksInMonth.map((week, weekIndex) => (
+                <View key={`week-${weekIndex}`} style={styles.weekRow}>
+                  {week.map((dayNum, colIndex) => {
+                    if (dayNum === null) {
+                      return (
+                        <View
+                          key={`empty-${weekIndex}-${colIndex}`}
+                          style={styles.dayColumnSlot}
+                        >
+                          <View style={styles.dayCell} />
+                        </View>
                       );
-                    }}
-                    style={[
-                      styles.dayCell,
-                      styles.dayCellActive,
-                      isSelected ? styles.dayCellSelected : null,
-                      !isSelected && isToday ? styles.dayCellToday : null,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.dayCellText,
-                        isSelected ? styles.dayCellTextSelected : null,
-                        !isSelected && isToday ? styles.dayCellTextToday : null,
-                      ]}
-                    >
-                      {dayNum}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+                    }
+
+                    const isSelected =
+                      tempSelectedDate.getDate() === dayNum &&
+                      tempSelectedDate.getMonth() === viewMonth &&
+                      tempSelectedDate.getFullYear() === viewYear;
+
+                    const isToday =
+                      new Date().getDate() === dayNum &&
+                      new Date().getMonth() === viewMonth &&
+                      new Date().getFullYear() === viewYear;
+
+                    return (
+                      <View
+                        key={`day-${dayNum}`}
+                        style={styles.dayColumnSlot}
+                      >
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: isSelected }}
+                          onPress={() => {
+                            setTempSelectedDate(
+                              new Date(viewYear, viewMonth, dayNum),
+                            );
+                          }}
+                          style={[
+                            styles.dayCell,
+                            styles.dayCellActive,
+                            isSelected ? styles.dayCellSelected : null,
+                            !isSelected && isToday ? styles.dayCellToday : null,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.dayCellText,
+                              isSelected ? styles.dayCellTextSelected : null,
+                              !isSelected && isToday
+                                ? styles.dayCellTextToday
+                                : null,
+                            ]}
+                          >
+                            {dayNum}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    );
+                  })}
+                </View>
+              ))}
             </View>
 
             {/* Rodapé com Data Selecionada e Ações */}
@@ -445,23 +470,30 @@ const styles = StyleSheet.create({
   },
   weekdaysRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     marginTop: spacing.xs,
-    paddingHorizontal: 2,
+  },
+  weekdayCell: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   weekdayText: {
-    width: 38,
     textAlign: 'center',
     ...typography.caption,
     fontWeight: '700',
     color: colors.textSecondary,
   },
   daysGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    gap: 4,
+    gap: 6,
     marginVertical: spacing.xs,
+  },
+  weekRow: {
+    flexDirection: 'row',
+  },
+  dayColumnSlot: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   dayCell: {
     width: 38,

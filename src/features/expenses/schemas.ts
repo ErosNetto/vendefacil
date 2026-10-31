@@ -273,7 +273,7 @@ export function buildFinancialReportCSV(params: {
   lines.push(`"Data";"Cliente";"Status";"Itens";"Valor Total (R$)"`);
   for (const s of sales) {
     if (s.status === 'cancelled') continue;
-    const dateFormatted = s.created_at.slice(0, 10);
+    const dateFormatted = s.sale_date ?? s.created_at.slice(0, 10);
     lines.push(
       `"${formatDateBR(dateFormatted)}";"${(s.customer_name_snapshot || 'Balcão').replace(/"/g, '""')}";"${s.status}";"${s.item_count}";"${formatCentsToBRL(s.total_cents)}"`
     );

@@ -14,6 +14,7 @@ import {
   PrimaryButton,
   Screen,
   SearchField,
+  useScrollToTop,
 } from '@/components/ui';
 import { colors, spacing } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
@@ -116,6 +117,9 @@ export default function CustomersListScreen() {
     [router],
   );
 
+  const { scrollRef, showScrollToTop, handleScroll, scrollToTop } =
+    useScrollToTop<FlatList<CustomerRecord>>();
+
   const keyExtractor = useCallback((item: CustomerRecord) => item.id, []);
 
   const renderItem = useCallback(
@@ -129,7 +133,11 @@ export default function CustomersListScreen() {
   );
 
   return (
-    <Screen scroll={false}>
+    <Screen
+      scroll={false}
+      showScrollToTop={showScrollToTop}
+      onScrollToTop={scrollToTop}
+    >
       <AppHeader
         title="Clientes"
         subtitle={activeWorkspace?.workspace.name ?? 'Carteira de clientes'}
@@ -200,6 +208,9 @@ export default function CustomersListScreen() {
         />
       ) : (
         <FlatList
+          ref={scrollRef}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
           data={customers}
           keyExtractor={keyExtractor}
           renderItem={renderItem}

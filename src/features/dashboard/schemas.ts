@@ -115,7 +115,7 @@ export function calculateDashboardMetrics(params: {
       continue;
     }
 
-    const saleDateISO = sale.created_at.slice(0, 10);
+    const saleDateISO = sale.sale_date ?? sale.created_at.slice(0, 10);
     const matchesPeriod =
       period === 'all' ||
       (period === 'today' && saleDateISO === cutoffs.today) ||

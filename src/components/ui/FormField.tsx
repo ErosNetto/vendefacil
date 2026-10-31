@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRef, useState } from 'react';
+import { type ComponentRef, useRef, useState } from 'react';
 import {
   Pressable,
   StyleSheet,
@@ -31,7 +31,7 @@ export function FormField({
   ...inputProps
 }: FormFieldProps) {
   const [passwordVisible, setPasswordVisible] = useState(false);
-  const wrapperRef = useRef<View | null>(null);
+  const wrapperRef = useRef<ComponentRef<typeof View>>(null);
   const { ensureVisibleOnFocus } = useScreenScroll();
   const hasError = Boolean(errorMessage);
 

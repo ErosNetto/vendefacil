@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, type ComponentRef } from 'react';
 import {
   Pressable,
   RefreshControl,
@@ -19,6 +19,7 @@ import {
   PeriodSegmentedControl,
   Screen,
   StatusBadge,
+  useScrollToTop,
 } from '@/components/ui';
 import { colors, radius, spacing, touchTarget, typography } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
@@ -163,8 +164,15 @@ export default function DashboardScreen() {
       .slice(0, 5);
   }, [data]);
 
+  const { scrollRef, showScrollToTop, handleScroll, scrollToTop } =
+    useScrollToTop<ComponentRef<typeof ScrollView>>();
+
   return (
-    <Screen scroll={false}>
+    <Screen
+      scroll={false}
+      showScrollToTop={showScrollToTop}
+      onScrollToTop={scrollToTop}
+    >
       <AppHeader
         title={`Olá, ${greetingName}!`}
         subtitle={workspaceName}
@@ -192,6 +200,9 @@ export default function DashboardScreen() {
         />
       ) : (
         <ScrollView
+          ref={scrollRef}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
           refreshControl={

@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ComponentRef } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -18,6 +18,7 @@ import {
   LoadingState,
   PrimaryButton,
   Screen,
+  useScrollToTop,
 } from '@/components/ui';
 import { colors, spacing, typography } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
@@ -171,6 +172,9 @@ export default function EditExpenseScreen() {
     router,
   ]);
 
+  const { scrollRef, showScrollToTop, handleScroll, scrollToTop } =
+    useScrollToTop<ComponentRef<typeof ScrollView>>();
+
   const categoryChips = categories.map((cat) => ({
     key: cat.id,
     label: cat.name,
@@ -204,7 +208,11 @@ export default function EditExpenseScreen() {
   }
 
   return (
-    <Screen scroll={false}>
+    <Screen
+      scroll={false}
+      showScrollToTop={showScrollToTop}
+      onScrollToTop={scrollToTop}
+    >
       <AppHeader
         title="Editar despesa"
         subtitle={activeWorkspace?.workspace.name ?? 'Ajuste de registro'}
@@ -215,6 +223,9 @@ export default function EditExpenseScreen() {
         style={styles.keyboardContainer}
       >
         <ScrollView
+          ref={scrollRef}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >

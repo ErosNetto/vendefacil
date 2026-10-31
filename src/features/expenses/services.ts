@@ -225,8 +225,8 @@ export async function fetchWorkspaceFinancialReport(params: {
       .select('*')
       .eq('workspace_id', workspaceId)
       .neq('status', 'cancelled')
-      .gte('created_at', `${startDateISO}T00:00:00Z`)
-      .lte('created_at', `${endDateISO}T23:59:59Z`),
+      .gte('sale_date', startDateISO)
+      .lte('sale_date', endDateISO),
     supabase
       .from('payments')
       .select('*')

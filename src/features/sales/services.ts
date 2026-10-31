@@ -101,6 +101,7 @@ export async function listWorkspaceSalesPaginated({
 
   const offset = Math.max(0, (page - 1) * pageSize);
   query = query
+    .order('sale_date', { ascending: false })
     .order('created_at', { ascending: false })
     .range(offset, offset + pageSize - 1);
 
@@ -224,6 +225,7 @@ export interface CreateOrConfirmSaleInput {
   downPaymentCents?: number;
   installmentCount?: number;
   firstDueDateISO?: string | null;
+  saleDateISO?: string | null;
 }
 
 export async function createOrConfirmWorkspaceSale(
@@ -244,6 +246,7 @@ export async function createOrConfirmWorkspaceSale(
     p_down_payment_cents: input.downPaymentCents ?? 0,
     p_installment_count: input.installmentCount ?? 1,
     p_first_due_date: input.firstDueDateISO ?? null,
+    p_sale_date: input.saleDateISO ?? null,
   });
 
   if (error) {
@@ -270,6 +273,7 @@ export interface UpdateDraftSaleInput {
   downPaymentCents?: number;
   installmentCount?: number;
   firstDueDateISO?: string | null;
+  saleDateISO?: string | null;
 }
 
 export async function updateWorkspaceDraftSale(
@@ -290,6 +294,7 @@ export async function updateWorkspaceDraftSale(
     p_down_payment_cents: input.downPaymentCents ?? 0,
     p_installment_count: input.installmentCount ?? 1,
     p_first_due_date: input.firstDueDateISO ?? null,
+    p_sale_date: input.saleDateISO ?? null,
   });
 
   if (error) {

@@ -9,5 +9,6 @@ export * from './PaginationUI';
 export * from './PeriodSegmentedControl';
 export * from './ProductCard';
 export * from './Screen';
+export * from './ScrollToTopButton';
 export * from './SearchAndFilters';
 export * from './StatusBadge';

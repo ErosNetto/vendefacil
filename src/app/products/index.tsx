@@ -14,6 +14,7 @@ import {
   ProductCard,
   Screen,
   SearchField,
+  useScrollToTop,
 } from '@/components/ui';
 import { colors, spacing } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
@@ -144,6 +145,9 @@ export default function ProductsCatalogScreen() {
     [router],
   );
 
+  const { scrollRef, showScrollToTop, handleScroll, scrollToTop } =
+    useScrollToTop<FlatList<ProductRow>>();
+
   const keyExtractor = useCallback((item: ProductRow) => item.id, []);
 
   const renderItem = useCallback(
@@ -160,7 +164,11 @@ export default function ProductsCatalogScreen() {
   );
 
   return (
-    <Screen scroll={false}>
+    <Screen
+      scroll={false}
+      showScrollToTop={showScrollToTop}
+      onScrollToTop={scrollToTop}
+    >
       <AppHeader
         title="Produtos"
         subtitle={activeWorkspace?.workspace.name ?? 'Catálogo'}
@@ -240,6 +248,9 @@ export default function ProductsCatalogScreen() {
         />
       ) : (
         <FlatList
+          ref={scrollRef}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
           data={products}
           keyExtractor={keyExtractor}
           initialNumToRender={8}

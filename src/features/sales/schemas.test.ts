@@ -111,6 +111,38 @@ describe('sales schemas and cart calculations', () => {
     expect(result.errorMessage).toContain('desconto não pode ser maior');
   });
 
+  it('validates retroactive sale date and blocks future sale dates', () => {
+    const cart = addOrIncrementCartItem([], mockProductA, 1);
+
+    // Venda retroativa válida
+    const retroResult = validateSaleSubmission({
+      items: cart,
+      discountInput: '0,00',
+      notes: 'Venda do caderno',
+      confirmImmediately: true,
+      saleDateInput: '10/10/2020',
+      paymentMode: 'installments',
+      installmentCountInput: '2',
+    });
+
+    expect(retroResult.success).toBe(true);
+    expect(retroResult.payload?.saleDateISO).toBe('2020-10-10');
+    // 1º vencimento sugerido baseado na data retroativa
+    expect(retroResult.payload?.firstDueDateISO).toBe('2020-11-09');
+
+    // Venda com data futura bloqueada
+    const futureResult = validateSaleSubmission({
+      items: cart,
+      discountInput: '0,00',
+      notes: '',
+      confirmImmediately: true,
+      saleDateInput: '01/01/2099',
+    });
+
+    expect(futureResult.success).toBe(false);
+    expect(futureResult.errorMessage).toContain('não pode ser no futuro');
+  });
+
   it('validates cancellation reason and generates unique idempotency keys', () => {
     expect(cancelSaleSchema.safeParse({ reason: 'ab' }).success).toBe(false);
     expect(

@@ -24,6 +24,7 @@ import {
   SearchField,
   SecondaryButton,
   StatusBadge,
+  useScrollToTop,
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
@@ -678,8 +679,15 @@ export default function FinanceTabScreen() {
     ],
   );
 
+  const { scrollRef, showScrollToTop, handleScroll, scrollToTop } =
+    useScrollToTop<FlatList<(typeof displayedInstallments)[number]>>();
+
   return (
-    <Screen scroll={false}>
+    <Screen
+      scroll={false}
+      showScrollToTop={showScrollToTop}
+      onScrollToTop={scrollToTop}
+    >
       <AppHeader
         title="Financeiro"
         subtitle={workspace?.name ?? 'Contas a receber e caixa'}
@@ -696,6 +704,9 @@ export default function FinanceTabScreen() {
         <LoadingState message="Carregando contas a receber..." />
       ) : (
         <FlatList
+          ref={scrollRef}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
           data={displayedInstallments}
           keyExtractor={keyExtractor}
           ListHeaderComponent={listHeader}

@@ -184,6 +184,7 @@ export interface ValidateSaleSubmissionInput {
   downPaymentInput?: string;
   installmentCountInput?: string | number;
   firstDueDateInput?: string;
+  saleDateInput?: string;
 }
 
 export interface ValidatedSaleSubmissionResult {
@@ -199,6 +200,7 @@ export interface ValidatedSaleSubmissionResult {
     downPaymentCents: number;
     installmentCount: number;
     firstDueDateISO: string | null;
+    saleDateISO: string;
   };
 }
 
@@ -260,6 +262,28 @@ export function validateSaleSubmission(
   let installmentCount = 1;
   let firstDueDateISO: string | null = null;
 
+  const rawSaleDate = (input.saleDateInput ?? '').trim();
+  let saleDateISO: string = getTodayISODate();
+  if (rawSaleDate) {
+    const parsedSaleDate = parseBRDateInputToISO(rawSaleDate);
+    if (!parsedSaleDate) {
+      return {
+        success: false,
+        errorMessage:
+          'Informe uma data da venda válida no formato dd/MM/aaaa.',
+      };
+    }
+    const todayISO = getTodayISODate();
+    if (parsedSaleDate > todayISO) {
+      return {
+        success: false,
+        errorMessage:
+          'A data da venda não pode ser no futuro. Para encomendas ou agendamentos, salve como rascunho.',
+      };
+    }
+    saleDateISO = parsedSaleDate;
+  }
+
   if (paymentMode === 'installments') {
     const rawDown = (input.downPaymentInput ?? '').trim();
     if (rawDown) {
@@ -314,7 +338,7 @@ export function validateSaleSubmission(
       }
       firstDueDateISO = parsedDate;
     } else {
-      firstDueDateISO = addDaysToISODate(getTodayISODate(), 30);
+      firstDueDateISO = addDaysToISODate(saleDateISO, 30);
     }
   }
 
@@ -333,6 +357,7 @@ export function validateSaleSubmission(
       downPaymentCents,
       installmentCount,
       firstDueDateISO,
+      saleDateISO,
     },
   };
 }

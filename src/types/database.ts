@@ -171,6 +171,7 @@ export type SaleRow = {
   down_payment_cents?: number;
   installment_count?: number;
   first_due_date?: string | null;
+  sale_date?: string;
   confirmed_at: string | null;
   cancelled_at: string | null;
   created_by: string | null;
@@ -603,6 +604,7 @@ export type Database = {
           notes?: string | null;
           cancellation_reason?: string | null;
           idempotency_key: string;
+          sale_date?: string;
           confirmed_at?: string | null;
           cancelled_at?: string | null;
           created_by?: string | null;
@@ -611,6 +613,7 @@ export type Database = {
         };
         Update: {
           status?: SaleStatus;
+          sale_date?: string;
           notes?: string | null;
           cancellation_reason?: string | null;
           confirmed_at?: string | null;
@@ -856,6 +859,7 @@ export type Database = {
           p_down_payment_cents?: number;
           p_installment_count?: number;
           p_first_due_date?: string | null;
+          p_sale_date?: string | null;
         };
         Returns: CreateOrConfirmSaleRpcResult;
       };
@@ -888,6 +892,7 @@ export type Database = {
           p_down_payment_cents?: number;
           p_installment_count?: number;
           p_first_due_date?: string | null;
+          p_sale_date?: string | null;
         };
         Returns: CreateOrConfirmSaleRpcResult;
       };

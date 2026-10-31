@@ -1,3 +1,4 @@
+import { useSegments } from 'expo-router';
 import {
   createContext,
   useCallback,
@@ -6,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ComponentRef,
   type ReactNode,
 } from 'react';
 import {
@@ -20,12 +22,20 @@ import {
   type NativeSyntheticEvent,
   type ViewStyle,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  SafeAreaView,
+  type Edge,
+} from 'react-native-safe-area-context';
 
 import { colors, spacing } from '@/constants/theme';
 
+import { ScrollToTopButton } from './ScrollToTopButton';
+
+type ViewRef = ComponentRef<typeof View>;
+type ScrollViewRef = ComponentRef<typeof ScrollView>;
+
 export interface ScreenScrollContextValue {
-  ensureVisibleOnFocus: (targetView: View | null) => void;
+  ensureVisibleOnFocus: (targetView: ViewRef | null) => void;
 }
 
 const ScreenScrollContext = createContext<ScreenScrollContextValue>({
@@ -42,6 +52,8 @@ export interface ScreenProps {
   keyboardAvoiding?: boolean;
   contentContainerStyle?: ViewStyle;
   backgroundColor?: string;
+  showScrollToTop?: boolean;
+  onScrollToTop?: () => void;
 }
 
 export function Screen({
@@ -50,19 +62,36 @@ export function Screen({
   keyboardAvoiding = true,
   contentContainerStyle,
   backgroundColor = colors.background,
+  showScrollToTop,
+  onScrollToTop,
 }: ScreenProps) {
-  const scrollViewRef = useRef<ScrollView | null>(null);
+  const segments = useSegments();
+  const isTabScreen = segments[0] === '(tabs)';
+  const scrollViewRef = useRef<ScrollViewRef>(null);
   const scrollOffsetYRef = useRef<number>(0);
+  const isAutoScrollingRef = useRef<boolean>(false);
+  const autoScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const keyboardHeightRef = useRef<number>(0);
-  const focusedViewRef = useRef<View | null>(null);
+  const focusedViewRef = useRef<ViewRef | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState<number>(0);
+  const [isScrolledDown, setIsScrolledDown] = useState<boolean>(false);
 
-  const scrollTargetIntoView = useCallback((targetView: View | null) => {
+  useEffect(() => {
+    return () => {
+      if (autoScrollTimeoutRef.current) {
+        clearTimeout(autoScrollTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const scrollTargetIntoView = useCallback((targetView: ViewRef | null) => {
     if (!targetView || !scrollViewRef.current) {
       return;
     }
 
-    targetView.measureInWindow((_x, y, _width, height) => {
+    targetView.measureInWindow((_x: number, y: number, _width: number, height: number) => {
       if (!height || Number.isNaN(y)) {
         return;
       }
@@ -114,7 +143,7 @@ export function Screen({
   }, [scrollTargetIntoView]);
 
   const ensureVisibleOnFocus = useCallback(
-    (targetView: View | null) => {
+    (targetView: ViewRef | null) => {
       focusedViewRef.current = targetView;
       setTimeout(() => {
         scrollTargetIntoView(targetView);
@@ -128,18 +157,52 @@ export function Screen({
 
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      scrollOffsetYRef.current = event.nativeEvent.contentOffset.y;
+      const y = event.nativeEvent.contentOffset.y;
+      scrollOffsetYRef.current = y;
+
+      if (isAutoScrollingRef.current) {
+        if (y <= 20) {
+          isAutoScrollingRef.current = false;
+          if (autoScrollTimeoutRef.current) {
+            clearTimeout(autoScrollTimeoutRef.current);
+            autoScrollTimeoutRef.current = null;
+          }
+        }
+        return;
+      }
+
+      const nextScrolled = y > 260;
+      setIsScrolledDown((prev) => (prev === nextScrolled ? prev : nextScrolled));
     },
     [],
   );
+
+  const handleInternalScrollToTop = useCallback(() => {
+    isAutoScrollingRef.current = true;
+    if (autoScrollTimeoutRef.current) {
+      clearTimeout(autoScrollTimeoutRef.current);
+    }
+    autoScrollTimeoutRef.current = setTimeout(() => {
+      isAutoScrollingRef.current = false;
+      autoScrollTimeoutRef.current = null;
+    }, 800);
+
+    setIsScrolledDown(false);
+    scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+  }, []);
 
   const contextValue = useMemo<ScreenScrollContextValue>(
     () => ({ ensureVisibleOnFocus }),
     [ensureVisibleOnFocus],
   );
 
+  const baseBottomPadding = isTabScreen ? spacing.xxxl : spacing.xxxl * 2;
   const dynamicBottomPadding =
-    keyboardHeight > 0 ? keyboardHeight + spacing.xxxl * 2 : spacing.xxxl;
+    keyboardHeight > 0 ? keyboardHeight + spacing.xxxl * 2 : baseBottomPadding;
+
+  const safeEdges: Edge[] = isTabScreen
+    ? ['top', 'left', 'right']
+    : ['top', 'bottom', 'left', 'right'];
 
   const inner = scroll ? (
     <ScrollView
@@ -160,11 +223,14 @@ export function Screen({
     <View style={[styles.staticContent, contentContainerStyle]}>{children}</View>
   );
 
+  const isScrollButtonVisible =
+    keyboardHeight === 0 && (scroll ? isScrolledDown : Boolean(showScrollToTop));
+
   return (
     <ScreenScrollContext.Provider value={contextValue}>
       <SafeAreaView
         style={[styles.safeArea, { backgroundColor }]}
-        edges={['top', 'left', 'right']}
+        edges={safeEdges}
       >
         {keyboardAvoiding && Platform.OS === 'ios' ? (
           <KeyboardAvoidingView style={styles.flex} behavior="padding">
@@ -173,6 +239,10 @@ export function Screen({
         ) : (
           inner
         )}
+        <ScrollToTopButton
+          visible={isScrollButtonVisible}
+          onPress={scroll ? handleInternalScrollToTop : onScrollToTop}
+        />
       </SafeAreaView>
     </ScreenScrollContext.Provider>
   );

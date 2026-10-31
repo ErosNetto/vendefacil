@@ -18,6 +18,7 @@ import {
   SearchField,
   SecondaryButton,
   StatusBadge,
+  useScrollToTop,
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
@@ -444,10 +445,17 @@ export default function InventoryTabScreen() {
     [handlePressDetail, handlePressAdjust, handlePressHistory],
   );
 
+  const { scrollRef, showScrollToTop, handleScroll, scrollToTop } =
+    useScrollToTop<FlatList<ProductRow>>();
+
   const keyExtractor = useCallback((item: ProductRow) => item.id, []);
 
   return (
-    <Screen scroll={false}>
+    <Screen
+      scroll={false}
+      showScrollToTop={showScrollToTop}
+      onScrollToTop={scrollToTop}
+    >
       <AppHeader
         title="Estoque"
         subtitle={activeWorkspace?.workspace.name ?? 'Espaço de trabalho'}
@@ -487,6 +495,9 @@ export default function InventoryTabScreen() {
         />
       ) : (
         <FlatList
+          ref={scrollRef}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
           data={displayedProducts}
           keyExtractor={keyExtractor}
           ListHeaderComponent={listHeader}

@@ -282,7 +282,9 @@ export default function SaleDetailScreen() {
             tone={statusMeta.tone}
           />
           <Text style={styles.dateText}>
-            {formatDateTimeBR(sale.created_at)}
+            {sale.sale_date
+              ? `Data da venda: ${formatDateBR(sale.sale_date)}`
+              : formatDateTimeBR(sale.created_at)}
           </Text>
         </View>
 

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, type ComponentRef } from 'react';
 import {
   Alert,
   Pressable,
@@ -20,6 +20,7 @@ import {
   PrimaryButton,
   Screen,
   StatusBadge,
+  useScrollToTop,
 } from '@/components/ui';
 import { colors, radius, spacing, touchTarget, typography } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
@@ -185,10 +186,17 @@ export default function FinancialReportsScreen() {
     }
   }, [data, workspaceName, activeRange]);
 
+  const { scrollRef, showScrollToTop, handleScroll, scrollToTop } =
+    useScrollToTop<ComponentRef<typeof ScrollView>>();
+
   const report = data?.report;
 
   return (
-    <Screen scroll={false}>
+    <Screen
+      scroll={false}
+      showScrollToTop={showScrollToTop}
+      onScrollToTop={scrollToTop}
+    >
       <AppHeader
         title="DRE e Relatórios"
         subtitle={workspaceName}
@@ -217,6 +225,9 @@ export default function FinancialReportsScreen() {
         />
       ) : (
         <ScrollView
+          ref={scrollRef}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
           refreshControl={

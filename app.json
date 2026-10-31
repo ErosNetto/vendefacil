@@ -6,10 +6,6 @@
     "orientation": "portrait",
     "scheme": "vendefacil",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "splash": {
-      "backgroundColor": "#087F5B"
-    },
     "android": {
       "package": "br.com.vendefacil.app",
       "adaptiveIcon": {
@@ -28,8 +24,14 @@
       "expo-router",
       "expo-secure-store",
       "expo-status-bar",
-      "expo-splash-screen",
-      "expo-image"
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#087F5B"
+        }
+      ],
+      "expo-image",
+      "expo-font"
     ]
   }
 }

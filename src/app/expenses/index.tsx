@@ -23,6 +23,7 @@ import {
   MoneyText,
   Screen,
   SearchField,
+  useScrollToTop,
 } from '@/components/ui';
 import { colors, radius, spacing, touchTarget, typography } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
@@ -318,8 +319,15 @@ export default function ExpensesListScreen() {
     ],
   );
 
+  const { scrollRef, showScrollToTop, handleScroll, scrollToTop } =
+    useScrollToTop<FlatList<(typeof expenses)[number]>>();
+
   return (
-    <Screen scroll={false}>
+    <Screen
+      scroll={false}
+      showScrollToTop={showScrollToTop}
+      onScrollToTop={scrollToTop}
+    >
       <AppHeader
         title="Despesas do negócio"
         subtitle={activeWorkspace?.workspace.name ?? 'Controle de saídas'}
@@ -370,6 +378,9 @@ export default function ExpensesListScreen() {
         />
       ) : (
         <FlatList
+          ref={scrollRef}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
           data={expenses}
           keyExtractor={keyExtractor}
           ListHeaderComponent={listHeader}
