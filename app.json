@@ -7,11 +7,6 @@
     "icon": "./assets/icon.png",
     "scheme": "vendefacil",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#087F5B"
-    },
     "android": {
       "package": "br.com.vendefacil.app",
       "adaptiveIcon": {
