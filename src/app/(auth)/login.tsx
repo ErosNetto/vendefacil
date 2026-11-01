@@ -8,6 +8,7 @@ import {
   PrimaryButton,
   Screen,
   SupabaseSetupNotice,
+  useToast,
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import { loginSchema, mapAuthErrorMessage } from '@/features/auth/schemas';
@@ -17,6 +18,7 @@ import { useSession } from '@/features/auth/SessionProvider';
 export default function LoginScreen() {
   const router = useRouter();
   const { isConfigured, configReason, hasForbiddenKey } = useSession();
+  const { showToast } = useToast();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -24,7 +26,6 @@ export default function LoginScreen() {
     email?: string;
     password?: string;
   }>({});
-  const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleLogin(): Promise<void> {
@@ -33,7 +34,6 @@ export default function LoginScreen() {
     }
 
     setFieldErrors({});
-    setFormError(null);
 
     const parsed = loginSchema.safeParse({ email, password });
     if (!parsed.success) {
@@ -42,6 +42,11 @@ export default function LoginScreen() {
         email: issues.email?.[0],
         password: issues.password?.[0],
       });
+      showToast({
+        tone: 'warning',
+        title: 'Revise os dados',
+        message: 'Preencha corretamente seu e-mail e senha.',
+      });
       return;
     }
 
@@ -49,7 +54,11 @@ export default function LoginScreen() {
     try {
       await signInWithEmail(parsed.data.email, parsed.data.password);
     } catch (error) {
-      setFormError(mapAuthErrorMessage(error));
+      showToast({
+        tone: 'error',
+        title: 'Falha no acesso',
+        message: mapAuthErrorMessage(error),
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -79,13 +88,6 @@ export default function LoginScreen() {
         <Text style={styles.cardSubtitle}>
           Acesse sua conta para gerenciar clientes, estoque, vendas e recebimentos.
         </Text>
-
-        {formError ? (
-          <View style={styles.errorAlert} accessibilityRole="alert">
-            <Ionicons name="alert-circle" size={18} color={colors.error} />
-            <Text style={styles.errorAlertText}>{formError}</Text>
-          </View>
-        ) : null}
 
         <FormField
           label="E-mail"
@@ -185,22 +187,6 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.textSecondary,
     marginBottom: spacing.xl,
-  },
-  errorAlert: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.errorSoft,
-    borderWidth: 1,
-    borderColor: colors.error,
-    borderRadius: radius.control,
-    padding: spacing.md,
-    marginBottom: spacing.lg,
-  },
-  errorAlertText: {
-    ...typography.body,
-    color: colors.error,
-    flex: 1,
   },
   footerRow: {
     flexDirection: 'row',

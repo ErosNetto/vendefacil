@@ -1,6 +1,8 @@
 import * as SecureStore from 'expo-secure-store';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Linking, Platform, Share } from 'react-native';
+import { Linking, Platform, Share } from 'react-native';
+
+import { showGlobalToast } from '@/components/ui/Toast';
 
 import {
   DEFAULT_WORKSPACE_PIX_SETTINGS,
@@ -197,9 +199,10 @@ export async function openWhatsAppWithMessage(params: {
     // Fallback para o menu de compartilhamento nativo do sistema
     await Share.share({ message: params.message });
   } catch {
-    Alert.alert(
-      'WhatsApp indisponível',
-      'Não foi possível abrir o WhatsApp neste dispositivo.',
-    );
+    showGlobalToast({
+      tone: 'error',
+      title: 'WhatsApp indisponível',
+      message: 'Não foi possível abrir o WhatsApp neste dispositivo.',
+    });
   }
 }

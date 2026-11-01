@@ -15,6 +15,7 @@ import {
   SearchField,
   SecondaryButton,
   StatusBadge,
+  useToast,
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
@@ -100,7 +101,7 @@ export default function SaleDetailScreen() {
     null,
   );
   const [isCancelling, setIsCancelling] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
   const [customersList, setCustomersList] = useState<CustomerRow[]>([]);
@@ -145,7 +146,6 @@ export default function SaleDetailScreen() {
     }
 
     setIsLinkingCustomer(true);
-    setActionError(null);
     try {
       const result = await linkSaleCustomer(
         workspaceId,
@@ -170,8 +170,19 @@ export default function SaleDetailScreen() {
       );
       setCustomerPhone(customer?.phone ?? null);
       setIsCustomerModalOpen(false);
+      showToast({
+        tone: 'success',
+        title: customer ? 'Cliente vinculado!' : 'Cliente desvinculado',
+        message: customer
+          ? `Venda associada a ${customer.full_name}.`
+          : 'A venda voltou a ficar como venda avulsa (balcão).',
+      });
     } catch (err) {
-      setActionError(mapSaleServiceError(err));
+      showToast({
+        tone: 'error',
+        title: 'Erro ao vincular cliente',
+        message: mapSaleServiceError(err),
+      });
     } finally {
       setIsLinkingCustomer(false);
     }
@@ -228,14 +239,22 @@ export default function SaleDetailScreen() {
     }
 
     setIsConfirmingDraft(true);
-    setActionError(null);
     try {
       await confirmWorkspaceDraftSale(workspaceId, sale.id);
       setConfirmDraftModalOpen(false);
       await loadSaleDetail();
+      showToast({
+        tone: 'success',
+        title: 'Venda confirmada!',
+        message: 'O estoque foi baixado e o financeiro atualizado.',
+      });
     } catch (error) {
       setConfirmDraftModalOpen(false);
-      setActionError(mapSaleServiceError(error));
+      showToast({
+        tone: 'error',
+        title: 'Não foi possível confirmar',
+        message: mapSaleServiceError(error),
+      });
     } finally {
       setIsConfirmingDraft(false);
     }
@@ -247,7 +266,6 @@ export default function SaleDetailScreen() {
     }
 
     setCancelReasonError(null);
-    setActionError(null);
 
     const parsed = cancelSaleSchema.safeParse({ reason: cancelReason });
     if (!parsed.success) {
@@ -263,8 +281,17 @@ export default function SaleDetailScreen() {
       setShowCancelForm(false);
       setCancelReason('');
       await loadSaleDetail();
+      showToast({
+        tone: 'warning',
+        title: 'Venda cancelada',
+        message: 'O estoque foi estornado e as cobranças em aberto canceladas.',
+      });
     } catch (error) {
-      setActionError(mapSaleServiceError(error));
+      showToast({
+        tone: 'error',
+        title: 'Erro ao cancelar venda',
+        message: mapSaleServiceError(error),
+      });
     } finally {
       setIsCancelling(false);
     }
@@ -846,12 +873,6 @@ export default function SaleDetailScreen() {
             </Text>
           </View>
         </View>
-
-        {actionError ? (
-          <View style={styles.errorBanner}>
-            <Text style={styles.errorBannerText}>{actionError}</Text>
-          </View>
-        ) : null}
 
         {sale.status !== 'cancelled' ? (
           <View style={styles.actionsColumn}>
@@ -1480,17 +1501,6 @@ const styles = StyleSheet.create({
     ...typography.caption,
     fontWeight: '700',
     color: colors.primaryDark,
-  },
-  errorBanner: {
-    backgroundColor: colors.errorSoft,
-    borderRadius: radius.control,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.error,
-  },
-  errorBannerText: {
-    ...typography.caption,
-    color: colors.error,
   },
   actionsColumn: {
     gap: spacing.sm,

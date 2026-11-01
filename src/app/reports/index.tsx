@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import {
-  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -21,6 +20,7 @@ import {
   Screen,
   StatusBadge,
   useScrollToTop,
+  useToast,
 } from '@/components/ui';
 import { colors, radius, spacing, touchTarget, typography } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
@@ -98,6 +98,7 @@ function getReportDateRange(periodKey: ReportPeriodKey): {
 
 export default function FinancialReportsScreen() {
   const { activeWorkspace } = useSession();
+  const { showToast } = useToast();
   const workspaceId = activeWorkspace?.workspace.id ?? null;
   const workspaceName = activeWorkspace?.workspace.name ?? 'Meu Negócio';
 
@@ -182,15 +183,22 @@ export default function FinancialReportsScreen() {
         title: `Relatorio_Financeiro_${workspaceName.replace(/\s+/g, '_')}.csv`,
         message: csvContent,
       });
+      showToast({
+        tone: 'success',
+        title: 'Relatório exportado!',
+        message: 'Planilha CSV gerada e compartilhada.',
+      });
     } catch (error) {
-      Alert.alert(
-        'Exportação',
-        error instanceof Error
-          ? error.message
-          : 'Não foi possível exportar o arquivo CSV.',
-      );
+      showToast({
+        tone: 'error',
+        title: 'Exportação falhou',
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Não foi possível exportar o arquivo CSV.',
+      });
     }
-  }, [data, workspaceName, activeRange]);
+  }, [data, workspaceName, activeRange, showToast]);
 
   const { scrollRef, showScrollToTop, handleScroll, scrollToTop } =
     useScrollToTop<ComponentRef<typeof ScrollView>>();

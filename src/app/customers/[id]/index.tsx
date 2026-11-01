@@ -15,6 +15,7 @@ import {
   Screen,
   SecondaryButton,
   StatusBadge,
+  useToast,
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
@@ -65,6 +66,7 @@ export default function CustomerDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { activeWorkspace } = useSession();
+  const { showToast } = useToast();
   const workspaceId = activeWorkspace?.workspace.id ?? null;
   const workspaceName = activeWorkspace?.workspace.name ?? 'VendeFácil';
   const financeSettings = getWorkspaceFinanceSettings(
@@ -241,9 +243,22 @@ export default function CustomerDetailScreen() {
       );
       setCustomer(updated);
       setConfirmArchiveVisible(false);
+      showToast({
+        tone: 'info',
+        title: updated.is_archived ? 'Cliente arquivado' : 'Cliente reativado',
+        message: updated.is_archived
+          ? `${customer.full_name} foi arquivado(a) e ocultado da busca padrão.`
+          : `${customer.full_name} foi reativado(a) com sucesso.`,
+      });
     } catch (error) {
       setConfirmArchiveVisible(false);
-      setErrorMessage(mapCustomerServiceError(error));
+      const errMsg = mapCustomerServiceError(error);
+      setErrorMessage(errMsg);
+      showToast({
+        tone: 'error',
+        title: 'Erro ao alterar status',
+        message: errMsg,
+      });
     } finally {
       setIsArchiving(false);
     }

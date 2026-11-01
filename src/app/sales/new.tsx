@@ -124,14 +124,12 @@ export default function NewSaleScreen() {
 
   const handleSaleDateChange = useCallback((val: string) => {
     setSaleDateInput(val);
-    setSubmitError(null);
     const parsedDate = parseBRDateInputToISO(val);
     if (parsedDate) {
       setFirstDueDateInput(formatDateBR(addDaysToISODate(parsedDate, 30)));
     }
   }, []);
 
-  const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const idempotencyKeyRef = useRef<string>(createSaleIdempotencyKey());
@@ -310,9 +308,13 @@ export default function NewSaleScreen() {
     setCart((prev) =>
       updateCartItemUnitPrice(prev, editingPriceItem.productId, parsed),
     );
+    showToast({
+      tone: 'info',
+      title: 'Preço especial aplicado',
+      message: `${editingPriceItem.productName}: ${formatCentsToBRL(parsed)} por un. nesta venda.`,
+    });
     setEditingPriceProductId(null);
     setEditingPriceError(null);
-    setSubmitError(null);
   }
 
   function handleRestoreCatalogPrice(): void {
@@ -324,9 +326,13 @@ export default function NewSaleScreen() {
     setCart((prev) =>
       updateCartItemUnitPrice(prev, editingPriceItem.productId, catalogPrice),
     );
+    showToast({
+      tone: 'info',
+      title: 'Preço de tabela restaurado',
+      message: `${editingPriceItem.productName}: ${formatCentsToBRL(catalogPrice)} por un.`,
+    });
     setEditingPriceProductId(null);
     setEditingPriceError(null);
-    setSubmitError(null);
   }
 
   const filteredCustomers = useMemo(() => {
@@ -382,7 +388,6 @@ export default function NewSaleScreen() {
     }
 
     setCart((prev) => addOrIncrementCartItem(prev, found, 1));
-    setSubmitError(null);
     showToast({
       tone: 'success',
       title: 'Adicionado ao carrinho!',
@@ -423,8 +428,6 @@ export default function NewSaleScreen() {
       return;
     }
 
-    setSubmitError(null);
-
     const validation = validateSaleSubmission({
       items: cart,
       discountInput,
@@ -439,9 +442,13 @@ export default function NewSaleScreen() {
     });
 
     if (!validation.success || !validation.payload) {
-      setSubmitError(
-        validation.errorMessage ?? 'Revise os dados da venda antes de salvar.',
-      );
+      const msg =
+        validation.errorMessage ?? 'Revise os dados da venda antes de salvar.';
+      showToast({
+        tone: 'warning',
+        title: 'Revise os dados da venda',
+        message: msg,
+      });
       return;
     }
 
@@ -479,9 +486,21 @@ export default function NewSaleScreen() {
             saleDateISO: validation.payload.saleDateISO,
           });
 
+      showToast({
+        tone: 'success',
+        title: confirmImmediately ? 'Venda confirmada!' : 'Rascunho salvo!',
+        message: confirmImmediately
+          ? `Total de ${formatCentsToBRL(totals.totalCents)} registrado com sucesso.`
+          : 'O rascunho foi salvo e pode ser editado quando quiser.',
+      });
       router.replace(`/sales/${result.sale_id}`);
     } catch (error) {
-      setSubmitError(mapSaleServiceError(error));
+      const errMsg = mapSaleServiceError(error);
+      showToast({
+        tone: 'error',
+        title: 'Não foi possível concluir a venda',
+        message: errMsg,
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -866,7 +885,6 @@ export default function NewSaleScreen() {
                       setCart((prev) =>
                         addOrIncrementCartItem(prev, product, 1),
                       );
-                      setSubmitError(null);
                     }}
                     style={[
                       styles.optionItem,
@@ -921,7 +939,6 @@ export default function NewSaleScreen() {
             accessibilityState={{ selected: paymentMode === 'cash' }}
             onPress={() => {
               setPaymentMode('cash');
-              setSubmitError(null);
             }}
             style={[
               styles.modeCard,
@@ -953,7 +970,6 @@ export default function NewSaleScreen() {
             accessibilityState={{ selected: paymentMode === 'installments' }}
             onPress={() => {
               setPaymentMode('installments');
-              setSubmitError(null);
             }}
             style={[
               styles.modeCard,
@@ -1024,7 +1040,6 @@ export default function NewSaleScreen() {
               value={downPaymentInput}
               onChangeText={(val) => {
                 setDownPaymentInput(maskBRLCurrencyInput(val));
-                setSubmitError(null);
               }}
             />
 
@@ -1033,7 +1048,6 @@ export default function NewSaleScreen() {
               value={firstDueDateInput}
               onChangeDate={(val) => {
                 setFirstDueDateInput(val);
-                setSubmitError(null);
               }}
             />
 
@@ -1049,7 +1063,6 @@ export default function NewSaleScreen() {
                     accessibilityState={{ selected: isSelected }}
                     onPress={() => {
                       setInstallmentCountInput(String(countVal));
-                      setSubmitError(null);
                     }}
                     style={[
                       styles.methodChip,
@@ -1076,7 +1089,6 @@ export default function NewSaleScreen() {
               value={installmentCountInput}
               onChangeText={(val) => {
                 setInstallmentCountInput(val);
-                setSubmitError(null);
               }}
             />
 
@@ -1122,7 +1134,6 @@ export default function NewSaleScreen() {
           value={discountInput}
           onChangeText={(val) => {
             setDiscountInput(maskBRLCurrencyInput(val));
-            setSubmitError(null);
           }}
         />
 
@@ -1132,7 +1143,6 @@ export default function NewSaleScreen() {
           value={notes}
           onChangeText={(val) => {
             setNotes(val);
-            setSubmitError(null);
           }}
         />
 
@@ -1169,12 +1179,6 @@ export default function NewSaleScreen() {
             </Text>
           </View>
         </View>
-
-        {submitError ? (
-          <View style={styles.errorBanner}>
-            <Text style={styles.errorBannerText}>{submitError}</Text>
-          </View>
-        ) : null}
 
         <View style={styles.actionsColumn}>
           <PrimaryButton
@@ -1942,18 +1946,6 @@ const styles = StyleSheet.create({
     ...typography.caption,
     fontWeight: '700',
     color: colors.primaryDark,
-  },
-  errorBanner: {
-    backgroundColor: colors.errorSoft,
-    borderRadius: radius.control,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.error,
-    marginBottom: spacing.lg,
-  },
-  errorBannerText: {
-    ...typography.caption,
-    color: colors.error,
   },
   actionsColumn: {
     gap: spacing.sm,

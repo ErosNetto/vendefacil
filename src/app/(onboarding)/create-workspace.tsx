@@ -9,6 +9,7 @@ import {
   Screen,
   SecondaryButton,
   StatusBadge,
+  useToast,
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
@@ -23,10 +24,10 @@ export default function CreateWorkspaceScreen() {
     refreshWorkspaceContext,
     signOut,
   } = useSession();
+  const { showToast } = useToast();
 
   const [workspaceName, setWorkspaceName] = useState('');
   const [fieldError, setFieldError] = useState<string | null>(null);
-  const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
 
@@ -42,31 +43,40 @@ export default function CreateWorkspaceScreen() {
     }
 
     setFieldError(null);
-    setSubmitError(null);
 
     const parsed = createWorkspaceSchema.safeParse({ name: workspaceName });
     if (!parsed.success) {
       const issue = parsed.error.flatten().fieldErrors.name?.[0];
       setFieldError(issue ?? 'Informe um nome válido para o seu negócio.');
+      showToast({
+        tone: 'warning',
+        title: 'Nome do espaço',
+        message: issue ?? 'Informe um nome válido para o seu negócio.',
+      });
       return;
     }
 
     setIsSubmitting(true);
     try {
       await createWorkspaceViaRpc(parsed.data.name);
+      showToast({
+        tone: 'success',
+        title: 'Espaço criado!',
+        message: `Seu espaço "${parsed.data.name}" está pronto.`,
+      });
       await refreshWorkspaceContext();
     } catch (err) {
       const rawMessage = err instanceof Error ? err.message : '';
-      if (rawMessage.includes('create_workspace') || rawMessage.includes('function')) {
-        setSubmitError(
-          'A função create_workspace não foi encontrada no banco. Execute a migração SQL da Fase 1 no SQL Editor do Supabase.',
-        );
-      } else {
-        setSubmitError(
-          rawMessage ||
-            'Não foi possível criar seu espaço de trabalho. Verifique sua conexão e tente novamente.',
-        );
-      }
+      const message =
+        rawMessage.includes('create_workspace') || rawMessage.includes('function')
+          ? 'A função create_workspace não foi encontrada no banco. Execute a migração SQL da Fase 1 no SQL Editor do Supabase.'
+          : rawMessage ||
+            'Não foi possível criar seu espaço de trabalho. Verifique sua conexão e tente novamente.';
+      showToast({
+        tone: 'error',
+        title: 'Erro ao criar espaço',
+        message,
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -117,13 +127,6 @@ export default function CreateWorkspaceScreen() {
           Você será registrado(a) automaticamente como Proprietário(a) (`owner`) e todos os
           seus dados comerciais ficarão protegidos por políticas RLS no banco.
         </Text>
-
-        {submitError ? (
-          <View style={styles.errorAlert} accessibilityRole="alert">
-            <Ionicons name="alert-circle" size={18} color={colors.error} />
-            <Text style={styles.errorAlertText}>{submitError}</Text>
-          </View>
-        ) : null}
 
         <FormField
           label="Nome da sua loja ou negócio"
@@ -208,22 +211,6 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.textSecondary,
     marginBottom: spacing.lg,
-  },
-  errorAlert: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.errorSoft,
-    borderWidth: 1,
-    borderColor: colors.error,
-    borderRadius: radius.control,
-    padding: spacing.md,
-    marginBottom: spacing.lg,
-  },
-  errorAlertText: {
-    ...typography.body,
-    color: colors.error,
-    flex: 1,
   },
   footerActions: {
     marginTop: spacing.xl,

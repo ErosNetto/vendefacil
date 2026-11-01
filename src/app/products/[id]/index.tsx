@@ -14,6 +14,7 @@ import {
   Screen,
   SecondaryButton,
   StatusBadge,
+  useToast,
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
@@ -49,6 +50,7 @@ export default function ProductDetailScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [confirmArchiveOpen, setConfirmArchiveOpen] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
+  const { showToast } = useToast();
 
   const loadProduct = useCallback(async () => {
     if (!workspaceId || !id) {
@@ -115,9 +117,22 @@ export default function ProductDetailScreen() {
       );
       setProduct(updated);
       setConfirmArchiveOpen(false);
+      showToast({
+        tone: updated.is_archived ? 'warning' : 'success',
+        title: updated.is_archived
+          ? 'Produto arquivado'
+          : 'Produto reativado!',
+        message: updated.is_archived
+          ? `"${updated.name}" foi ocultado de novas vendas.`
+          : `"${updated.name}" voltou a ficar disponível para vendas.`,
+      });
     } catch (error) {
       setConfirmArchiveOpen(false);
-      setErrorMessage(mapProductServiceError(error));
+      showToast({
+        tone: 'error',
+        title: 'Erro ao atualizar produto',
+        message: mapProductServiceError(error),
+      });
     } finally {
       setIsArchiving(false);
     }

@@ -9,6 +9,7 @@ import {
   Screen,
   SecondaryButton,
   SupabaseSetupNotice,
+  useToast,
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import { mapAuthErrorMessage, signUpSchema } from '@/features/auth/schemas';
@@ -18,6 +19,7 @@ import { useSession } from '@/features/auth/SessionProvider';
 export default function RegisterScreen() {
   const router = useRouter();
   const { isConfigured, configReason, hasForbiddenKey } = useSession();
+  const { showToast } = useToast();
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -29,7 +31,6 @@ export default function RegisterScreen() {
     password?: string;
     confirmPassword?: string;
   }>({});
-  const [formError, setFormError] = useState<string | null>(null);
   const [awaitingEmailConfirmation, setAwaitingEmailConfirmation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -39,7 +40,6 @@ export default function RegisterScreen() {
     }
 
     setFieldErrors({});
-    setFormError(null);
 
     const parsed = signUpSchema.safeParse({
       fullName,
@@ -56,6 +56,11 @@ export default function RegisterScreen() {
         password: issues.password?.[0],
         confirmPassword: issues.confirmPassword?.[0],
       });
+      showToast({
+        tone: 'warning',
+        title: 'Revise os dados',
+        message: 'Preencha todos os campos obrigatórios corretamente.',
+      });
       return;
     }
 
@@ -69,9 +74,19 @@ export default function RegisterScreen() {
 
       if (result.requiresEmailConfirmation) {
         setAwaitingEmailConfirmation(true);
+      } else {
+        showToast({
+          tone: 'success',
+          title: 'Conta criada!',
+          message: 'Bem-vindo(a) ao VendeFácil!',
+        });
       }
     } catch (error) {
-      setFormError(mapAuthErrorMessage(error));
+      showToast({
+        tone: 'error',
+        title: 'Falha no cadastro',
+        message: mapAuthErrorMessage(error),
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -110,13 +125,6 @@ export default function RegisterScreen() {
           </View>
         ) : (
           <>
-            {formError ? (
-              <View style={styles.errorAlert} accessibilityRole="alert">
-                <Ionicons name="alert-circle" size={18} color={colors.error} />
-                <Text style={styles.errorAlertText}>{formError}</Text>
-              </View>
-            ) : null}
-
             <FormField
               label="Seu nome completo"
               placeholder="Ex.: Maria Oliveira"
@@ -216,22 +224,6 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.textSecondary,
     marginBottom: spacing.xl,
-  },
-  errorAlert: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.errorSoft,
-    borderWidth: 1,
-    borderColor: colors.error,
-    borderRadius: radius.control,
-    padding: spacing.md,
-    marginBottom: spacing.lg,
-  },
-  errorAlertText: {
-    ...typography.body,
-    color: colors.error,
-    flex: 1,
   },
   confirmationBox: {
     backgroundColor: colors.primarySoft,

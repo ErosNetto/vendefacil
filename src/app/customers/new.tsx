@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 
-import { AppHeader, ErrorState, Screen } from '@/components/ui';
+import { AppHeader, ErrorState, Screen, useToast } from '@/components/ui';
 import { useSession } from '@/features/auth/SessionProvider';
 import { CustomerForm } from '@/features/customers/CustomerForm';
 import type { CustomerFormInput } from '@/features/customers/schemas';
@@ -12,6 +12,7 @@ import {
 export default function NewCustomerScreen() {
   const router = useRouter();
   const { activeWorkspace } = useSession();
+  const { showToast } = useToast();
   const workspaceId = activeWorkspace?.workspace.id ?? null;
 
   if (!workspaceId) {
@@ -31,6 +32,11 @@ export default function NewCustomerScreen() {
     }
     try {
       const created = await createWorkspaceCustomer(workspaceId, values);
+      showToast({
+        tone: 'success',
+        title: 'Cliente cadastrado!',
+        message: `${created.full_name} foi cadastrado(a) com sucesso.`,
+      });
       router.replace(`/customers/${created.id}`);
     } catch (error) {
       throw new Error(mapCustomerServiceError(error), { cause: error });

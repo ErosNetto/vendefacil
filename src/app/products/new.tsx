@@ -6,6 +6,7 @@ import {
   ErrorState,
   LoadingState,
   Screen,
+  useToast,
 } from '@/components/ui';
 import { useSession } from '@/features/auth/SessionProvider';
 import { uploadProductImageToPrivateBucket } from '@/features/products/imageService';
@@ -24,6 +25,7 @@ export default function NewProductScreen() {
   const router = useRouter();
   const { activeWorkspace } = useSession();
   const workspaceId = activeWorkspace?.workspace.id ?? null;
+  const { showToast } = useToast();
 
   const [categories, setCategories] = useState<CategoryRow[]>([]);
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
@@ -76,6 +78,11 @@ export default function NewProductScreen() {
           null,
         );
       }
+      showToast({
+        tone: 'success',
+        title: 'Produto cadastrado!',
+        message: `"${created.name}" foi adicionado ao seu catálogo.`,
+      });
       router.replace(`/products/${created.id}`);
     } catch (error) {
       throw new Error(mapProductServiceError(error), { cause: error });

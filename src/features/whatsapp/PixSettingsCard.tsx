@@ -7,6 +7,7 @@ import {
   PrimaryButton,
   SecondaryButton,
   StatusBadge,
+  useToast,
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import {
@@ -39,6 +40,7 @@ export function PixSettingsCard({
   onUpdated,
 }: PixSettingsCardProps) {
   const { pixSettings, refreshPixSettings } = useWorkspacePixSettings(workspace);
+  const { showToast } = useToast();
 
   const [pixKeyType, setPixKeyType] = useState<PixKeyType>(
     pixSettings.pixKeyType,
@@ -49,8 +51,6 @@ export function PixSettingsCard({
     pixSettings.pixHolderName,
   );
   const [isSaving, setIsSaving] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setPixKeyType(pixSettings.pixKeyType);
@@ -78,9 +78,6 @@ export function PixSettingsCard({
       return;
     }
 
-    setErrorMessage(null);
-    setSuccessMessage(null);
-
     const validation = validatePixSettingsInput({
       pixKeyType,
       pixKeyInput: clearAll ? '' : pixKeyInput,
@@ -89,9 +86,11 @@ export function PixSettingsCard({
     });
 
     if (!validation.success || !validation.payload) {
-      setErrorMessage(
-        validation.errorMessage ?? 'Revise os dados PIX informados.',
-      );
+      showToast({
+        tone: 'warning',
+        title: 'Revise os dados PIX',
+        message: validation.errorMessage ?? 'Verifique a chave PIX informada.',
+      });
       return;
     }
 
@@ -110,18 +109,28 @@ export function PixSettingsCard({
         setPixKeyInput('');
         setPixBankInput('');
         setPixHolderInput('');
-        setSuccessMessage('Dados PIX removidos com sucesso.');
+        showToast({
+          tone: 'info',
+          title: 'Dados PIX removidos',
+          message: 'A chave PIX foi desvinculada das mensagens do WhatsApp.',
+        });
       } else {
-        setSuccessMessage(
-          'Dados PIX salvos! Eles serão incluídos automaticamente nas cobranças e orçamentos via WhatsApp.',
-        );
+        showToast({
+          tone: 'success',
+          title: 'Chave PIX salva!',
+          message:
+            'Seus dados PIX serão incluídos nas cobranças e orçamentos via WhatsApp.',
+        });
       }
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : 'Não foi possível salvar os dados PIX.',
-      );
+      showToast({
+        tone: 'error',
+        title: 'Erro ao salvar PIX',
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Não foi possível salvar os dados PIX.',
+      });
     } finally {
       setIsSaving(false);
     }
@@ -160,8 +169,6 @@ export function PixSettingsCard({
                 onPress={() => {
                   setPixKeyType(option.key);
                   setPixKeyInput((prev) => maskPixKeyInput(prev, option.key));
-                  setErrorMessage(null);
-                  setSuccessMessage(null);
                 }}
                 style={[styles.typeChip, selected ? styles.typeChipActive : null]}
               >
@@ -195,8 +202,6 @@ export function PixSettingsCard({
         }
         onChangeText={(val) => {
           setPixKeyInput(maskPixKeyInput(val, pixKeyType));
-          setErrorMessage(null);
-          setSuccessMessage(null);
         }}
       />
 
@@ -208,8 +213,6 @@ export function PixSettingsCard({
             value={pixBankInput}
             onChangeText={(val) => {
               setPixBankInput(val);
-              setErrorMessage(null);
-              setSuccessMessage(null);
             }}
           />
         </View>
@@ -221,8 +224,6 @@ export function PixSettingsCard({
             value={pixHolderInput}
             onChangeText={(val) => {
               setPixHolderInput(val);
-              setErrorMessage(null);
-              setSuccessMessage(null);
             }}
           />
         </View>
@@ -234,18 +235,6 @@ export function PixSettingsCard({
             Prévia de como vai aparecer no WhatsApp do cliente:
           </Text>
           <Text style={styles.previewContent}>{previewText}</Text>
-        </View>
-      ) : null}
-
-      {errorMessage ? (
-        <View style={styles.errorBanner}>
-          <Text style={styles.errorText}>{errorMessage}</Text>
-        </View>
-      ) : null}
-
-      {successMessage ? (
-        <View style={styles.successBanner}>
-          <Text style={styles.successText}>{successMessage}</Text>
         </View>
       ) : null}
 
@@ -366,29 +355,6 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.text,
     lineHeight: 18,
-  },
-  errorBanner: {
-    backgroundColor: colors.errorSoft,
-    borderRadius: radius.control,
-    borderWidth: 1,
-    borderColor: colors.error,
-    padding: spacing.md,
-  },
-  errorText: {
-    ...typography.caption,
-    color: colors.error,
-  },
-  successBanner: {
-    backgroundColor: colors.primarySoft,
-    borderRadius: radius.control,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    padding: spacing.md,
-  },
-  successText: {
-    ...typography.caption,
-    color: colors.primaryDark,
-    fontWeight: '600',
   },
   actionsCol: {
     gap: spacing.xs,

@@ -12,13 +12,13 @@ import {
 import {
   AppHeader,
   DatePickerField,
-  ErrorState,
   FilterChips,
   FormField,
   LoadingState,
   PrimaryButton,
   Screen,
   useScrollToTop,
+  useToast,
 } from '@/components/ui';
 import { colors, spacing, typography } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
@@ -41,6 +41,7 @@ import { formatDateBR, maskBRLCurrencyInput } from '@/utils/formatters';
 export default function NewExpenseScreen() {
   const router = useRouter();
   const { activeWorkspace } = useSession();
+  const { showToast } = useToast();
   const workspaceId = activeWorkspace?.workspace.id ?? null;
 
   const [categories, setCategories] = useState<ExpenseCategoryRow[]>([]);
@@ -59,7 +60,6 @@ export default function NewExpenseScreen() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [generalError, setGeneralError] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadCategories() {
@@ -92,7 +92,6 @@ export default function NewExpenseScreen() {
     if (!workspaceId || isSubmitting) return;
 
     setFieldErrors({});
-    setGeneralError(null);
 
     const expenseDate = parseBRDateInputToISO(expenseDateBR) ?? '';
 
@@ -115,6 +114,11 @@ export default function NewExpenseScreen() {
         }
       }
       setFieldErrors(errors);
+      showToast({
+        tone: 'warning',
+        title: 'Revise os dados da despesa',
+        message: 'Preencha a descrição, valor e data corretamente.',
+      });
       return;
     }
 
@@ -122,13 +126,21 @@ export default function NewExpenseScreen() {
       setIsSubmitting(true);
       const payload = normalizeExpensePayload(parseResult.data);
       await createWorkspaceExpense(workspaceId, payload);
+      showToast({
+        tone: 'success',
+        title: 'Despesa registrada!',
+        message: `${description} (${amountInput}) lançada no caixa.`,
+      });
       router.back();
     } catch (error) {
-      setGeneralError(
-        error instanceof Error
-          ? error.message
-          : 'Não foi possível registrar a despesa.',
-      );
+      showToast({
+        tone: 'error',
+        title: 'Erro ao registrar despesa',
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Não foi possível registrar a despesa.',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -142,6 +154,7 @@ export default function NewExpenseScreen() {
     paymentMethod,
     notes,
     router,
+    showToast,
   ]);
 
   const categoryChips = categories.map((cat) => ({
@@ -179,16 +192,6 @@ export default function NewExpenseScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
-          {generalError ? (
-            <View style={styles.errorContainer}>
-              <ErrorState
-                title="Erro ao salvar"
-                message={generalError}
-                onRetry={handleSubmit}
-              />
-            </View>
-          ) : null}
-
           <FormField
             label="Descrição da despesa *"
             value={description}
@@ -280,9 +283,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: spacing.xxl,
     gap: spacing.md,
-  },
-  errorContainer: {
-    marginBottom: spacing.xs,
   },
   sectionBlock: {
     gap: spacing.xs,

@@ -19,6 +19,7 @@ import {
   PrimaryButton,
   SecondaryButton,
   StatusBadge,
+  useToast,
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import {
@@ -114,8 +115,8 @@ export function ProductForm({
     barcode?: string;
     description?: string;
   }>({});
-  const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { showToast } = useToast();
 
   useEffect(() => {
     let isMounted = true;
@@ -154,20 +155,28 @@ export function ProductForm({
     if (isPickingImage || isSubmitting) {
       return;
     }
-    setSubmitError(null);
     setIsPickingImage(true);
     try {
       const picked = await pickAndOptimizeProductImage(source);
       if (picked) {
         setPreparedImage(picked);
         setRemoveExistingImage(false);
+        showToast({
+          tone: 'success',
+          title: 'Foto selecionada e otimizada!',
+          message: 'A imagem será enviada ao bucket privado ao salvar o produto.',
+        });
       }
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
           : 'Não foi possível selecionar ou otimizar a imagem.';
-      setSubmitError(message);
+      showToast({
+        tone: 'error',
+        title: 'Erro ao processar foto',
+        message,
+      });
     } finally {
       setIsPickingImage(false);
     }
@@ -196,7 +205,16 @@ export function ProductForm({
       const result = await lookupProductByBarcode(cleaned, { workspaceId });
       setBarcodeLookupFeedback(result);
 
-      if (result.source === 'external' && result.found) {
+      if (
+        result.source === 'workspace_catalog' &&
+        result.existingWorkspaceProduct
+      ) {
+        showToast({
+          tone: 'info',
+          title: 'Código já existe no seu catálogo',
+          message: `Produto: "${result.existingWorkspaceProduct.name}".`,
+        });
+      } else if (result.source === 'external' && result.found) {
         if (result.name) {
           setName(result.name);
           setFieldErrors((prev) => ({ ...prev, name: undefined }));
@@ -220,6 +238,18 @@ export function ProductForm({
             setCategoryId(matchedCat.id);
           }
         }
+        showToast({
+          tone: 'success',
+          title: `Produto encontrado (${result.providerLabel})!`,
+          message: `Código ${result.barcode}: nome e marca preenchidos automaticamente.`,
+        });
+      } else {
+        showToast({
+          tone: 'warning',
+          title: `Código ${result.barcode} preenchido`,
+          message:
+            'Produto não encontrado na internet. Preencha o nome e os preços abaixo.',
+        });
       }
     } finally {
       setIsLookingUpBarcode(false);
@@ -245,6 +275,11 @@ export function ProductForm({
       setCategoryId(created.id);
       setNewCategoryName('');
       setNewCategoryModalOpen(false);
+      showToast({
+        tone: 'success',
+        title: 'Categoria criada!',
+        message: `"${created.name}" foi adicionada e selecionada.`,
+      });
     } catch (error) {
       setNewCategoryError(mapProductServiceError(error));
     } finally {
@@ -258,7 +293,6 @@ export function ProductForm({
     }
 
     setFieldErrors({});
-    setSubmitError(null);
 
     const candidate: ProductFormInput = {
       name,
@@ -285,6 +319,11 @@ export function ProductForm({
         barcode: issues.barcode?.[0],
         description: issues.description?.[0],
       });
+      showToast({
+        tone: 'warning',
+        title: 'Verifique os campos obrigatórios',
+        message: 'Preencha o nome e o preço de venda do produto.',
+      });
       return;
     }
 
@@ -300,7 +339,11 @@ export function ProductForm({
         error instanceof Error
           ? error.message
           : 'Não foi possível salvar o produto.';
-      setSubmitError(message);
+      showToast({
+        tone: 'error',
+        title: 'Erro ao salvar produto',
+        message,
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -310,13 +353,6 @@ export function ProductForm({
 
   return (
     <View style={styles.card}>
-      {submitError ? (
-        <View style={styles.errorAlert} accessibilityRole="alert">
-          <Ionicons name="alert-circle" size={18} color={colors.error} />
-          <Text style={styles.errorAlertText}>{submitError}</Text>
-        </View>
-      ) : null}
-
       <View style={styles.barcodeHeroBanner}>
         <View style={styles.barcodeHeroTopRow}>
           <View style={styles.barcodeHeroIconBox}>
@@ -370,109 +406,70 @@ export function ProductForm({
               Buscando informações do código {barcode} nas bases de produtos...
             </Text>
           </View>
-        ) : barcodeLookupFeedback ? (
-          barcodeLookupFeedback.source === 'workspace_catalog' &&
+        ) : barcodeLookupFeedback?.source === 'workspace_catalog' &&
           barcodeLookupFeedback.existingWorkspaceProduct ? (
-            <View style={styles.lookupCatalogBox}>
-              <View style={styles.lookupFeedbackHeader}>
-                <Ionicons
-                  name="information-circle"
-                  size={18}
-                  color="#1864AB"
-                />
-                <Text style={styles.lookupCatalogTitle}>
-                  Código {barcodeLookupFeedback.barcode} já existe no seu
-                  catálogo
-                </Text>
-              </View>
-              <Text style={styles.lookupCatalogBody}>
-                Produto encontrado:{' '}
-                <Text style={styles.lookupStrong}>
-                  {barcodeLookupFeedback.existingWorkspaceProduct.name}
-                </Text>
+          <View style={styles.lookupCatalogBox}>
+            <View style={styles.lookupFeedbackHeader}>
+              <Ionicons
+                name="information-circle"
+                size={18}
+                color="#1864AB"
+              />
+              <Text style={styles.lookupCatalogTitle}>
+                Código {barcodeLookupFeedback.barcode} já existe no seu
+                catálogo
               </Text>
-              <View style={styles.lookupActionsRow}>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() =>
-                    router.push(
-                      `/products/${barcodeLookupFeedback.existingWorkspaceProduct!.id}`,
-                    )
+            </View>
+            <Text style={styles.lookupCatalogBody}>
+              Produto encontrado:{' '}
+              <Text style={styles.lookupStrong}>
+                {barcodeLookupFeedback.existingWorkspaceProduct.name}
+              </Text>
+            </Text>
+            <View style={styles.lookupActionsRow}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() =>
+                  router.push(
+                    `/products/${barcodeLookupFeedback.existingWorkspaceProduct!.id}`,
+                  )
+                }
+                style={styles.lookupActionPill}
+              >
+                <Ionicons
+                  name="open-outline"
+                  size={14}
+                  color={colors.primaryDark}
+                />
+                <Text style={styles.lookupActionPillText}>
+                  Abrir produto existente
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  const existing =
+                    barcodeLookupFeedback.existingWorkspaceProduct!;
+                  setName(existing.name);
+                  setBrand(existing.brand ?? '');
+                  setDescription(existing.description ?? '');
+                  if (existing.category_id) {
+                    setCategoryId(existing.category_id);
                   }
-                  style={styles.lookupActionPill}
-                >
-                  <Ionicons
-                    name="open-outline"
-                    size={14}
-                    color={colors.primaryDark}
-                  />
-                  <Text style={styles.lookupActionPillText}>
-                    Abrir produto existente
-                  </Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => {
-                    const existing =
-                      barcodeLookupFeedback.existingWorkspaceProduct!;
-                    setName(existing.name);
-                    setBrand(existing.brand ?? '');
-                    setDescription(existing.description ?? '');
-                    if (existing.category_id) {
-                      setCategoryId(existing.category_id);
-                    }
-                  }}
-                  style={styles.lookupActionPill}
-                >
-                  <Ionicons
-                    name="copy-outline"
-                    size={14}
-                    color={colors.primaryDark}
-                  />
-                  <Text style={styles.lookupActionPillText}>
-                    Usar nome/marca mesmo assim
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
-          ) : barcodeLookupFeedback.source === 'external' &&
-            barcodeLookupFeedback.found ? (
-            <View style={styles.lookupSuccessBox}>
-              <View style={styles.lookupFeedbackHeader}>
+                }}
+                style={styles.lookupActionPill}
+              >
                 <Ionicons
-                  name="checkmark-circle"
-                  size={18}
-                  color="#2B8A3E"
+                  name="copy-outline"
+                  size={14}
+                  color={colors.primaryDark}
                 />
-                <Text style={styles.lookupSuccessTitle}>
-                  Produto e código encontrados ({barcodeLookupFeedback.providerLabel})!
+                <Text style={styles.lookupActionPillText}>
+                  Usar nome/marca mesmo assim
                 </Text>
-              </View>
-              <Text style={styles.lookupSuccessBody}>
-                Código <Text style={styles.lookupStrong}>{barcodeLookupFeedback.barcode}</Text>{' '}
-                localizado na base online. Nome e marca foram preenchidos
-                automaticamente — informe apenas seu preço de venda e custo.
-              </Text>
+              </Pressable>
             </View>
-          ) : (
-            <View style={styles.lookupWarningBox}>
-              <View style={styles.lookupFeedbackHeader}>
-                <Ionicons
-                  name="alert-circle"
-                  size={18}
-                  color="#B45309"
-                />
-                <Text style={styles.lookupWarningTitle}>
-                  Código {barcodeLookupFeedback.barcode} lido • Produto não
-                  encontrado na internet
-                </Text>
-              </View>
-              <Text style={styles.lookupWarningBody}>
-                O código de barras já foi preenchido! Como este item ainda não
-                consta nas bases públicas, preencha o nome e os preços abaixo.
-              </Text>
-            </View>
-          )
+          </View>
         ) : null}
       </View>
 
@@ -836,22 +833,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.xl,
-  },
-  errorAlert: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.errorSoft,
-    borderWidth: 1,
-    borderColor: colors.error,
-    borderRadius: radius.control,
-    padding: spacing.md,
-    marginBottom: spacing.lg,
-  },
-  errorAlertText: {
-    ...typography.body,
-    color: colors.error,
-    flex: 1,
   },
   barcodeHeroBanner: {
     backgroundColor: colors.primarySoft,

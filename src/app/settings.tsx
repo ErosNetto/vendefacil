@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { AppHeader, Screen, SecondaryButton, StatusBadge } from '@/components/ui';
+import { AppHeader, Screen, SecondaryButton, StatusBadge, useToast } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
 import { FinanceSettingsCard } from '@/features/finance/FinanceSettingsCard';
@@ -23,6 +23,7 @@ export default function SettingsScreen() {
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const { showToast } = useToast();
 
   async function handleRefresh(): Promise<void> {
     if (isRefreshing) {
@@ -31,6 +32,17 @@ export default function SettingsScreen() {
     setIsRefreshing(true);
     try {
       await refreshWorkspaceContext();
+      showToast({
+        tone: 'success',
+        title: 'Dados sincronizados!',
+        message: 'As configurações da conta e da loja foram atualizadas.',
+      });
+    } catch {
+      showToast({
+        tone: 'error',
+        title: 'Falha ao sincronizar',
+        message: 'Verifique sua conexão e tente novamente.',
+      });
     } finally {
       setIsRefreshing(false);
     }
@@ -126,7 +138,14 @@ export default function SettingsScreen() {
             return (
               <Pressable
                 key={item.workspace.id}
-                onPress={() => selectWorkspace(item.workspace.id)}
+                onPress={() => {
+                  selectWorkspace(item.workspace.id);
+                  showToast({
+                    tone: 'info',
+                    title: `Espaço ativo: ${item.workspace.name}`,
+                    message: 'Os dados exibidos foram alternados para esta loja.',
+                  });
+                }}
                 accessibilityRole="button"
                 accessibilityState={{ selected: isSelected }}
                 style={[

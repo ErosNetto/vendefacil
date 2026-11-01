@@ -17,6 +17,7 @@ import {
   PrimaryButton,
   SecondaryButton,
   StatusBadge,
+  useToast,
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import {
@@ -123,8 +124,9 @@ export function ReceivePaymentModal({
   const [interestInput, setInterestInput] = useState('0,00');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
   const [notes, setNotes] = useState('');
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { showToast } = useToast();
 
   const idempotencyKeyRef = useRef<string>(createPaymentIdempotencyKey());
 
@@ -242,9 +244,11 @@ export function ReceivePaymentModal({
     }
 
     if (selectedInstallments.length === 0) {
-      setErrorMessage(
-        'Selecione pelo menos uma parcela para registrar o recebimento.',
-      );
+      showToast({
+        tone: 'warning',
+        title: 'Selecione uma parcela',
+        message: 'Selecione pelo menos uma parcela para registrar o recebimento.',
+      });
       return;
     }
 
@@ -260,9 +264,11 @@ export function ReceivePaymentModal({
     });
 
     if (!validation.success || !validation.payload) {
-      setErrorMessage(
-        validation.errorMessage ?? 'Verifique os valores informados.',
-      );
+      showToast({
+        tone: 'warning',
+        title: 'Revise os valores do recebimento',
+        message: validation.errorMessage ?? 'Verifique os valores informados.',
+      });
       return;
     }
 
@@ -279,9 +285,24 @@ export function ReceivePaymentModal({
         idempotencyKey: idempotencyKeyRef.current,
       });
 
+      const totalPaidCents =
+        validation.payload.principalCents +
+        validation.payload.fineCents +
+        validation.payload.interestCents;
+
+      showToast({
+        tone: 'success',
+        title: 'Pagamento recebido!',
+        message: `${formatCentsToBRL(totalPaidCents)} registrado no caixa com sucesso.`,
+      });
+
       onSuccess();
     } catch (error) {
-      setErrorMessage(mapFinanceServiceError(error));
+      showToast({
+        tone: 'error',
+        title: 'Erro ao registrar recebimento',
+        message: mapFinanceServiceError(error),
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -637,12 +658,6 @@ export function ReceivePaymentModal({
               ) : null}
             </View>
 
-            {errorMessage ? (
-              <View style={styles.errorBanner}>
-                <Text style={styles.errorBannerText}>{errorMessage}</Text>
-              </View>
-            ) : null}
-
             <View style={styles.actionsColumn}>
               <PrimaryButton
                 label="Confirmar recebimento"
@@ -898,18 +913,6 @@ const styles = StyleSheet.create({
   totalSummaryBreakdown: {
     ...typography.caption,
     color: colors.primaryDark,
-  },
-  errorBanner: {
-    backgroundColor: colors.errorSoft,
-    borderRadius: radius.control,
-    borderWidth: 1,
-    borderColor: colors.error,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-  },
-  errorBannerText: {
-    ...typography.caption,
-    color: colors.error,
   },
   actionsColumn: {
     gap: spacing.sm,

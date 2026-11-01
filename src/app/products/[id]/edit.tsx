@@ -6,6 +6,7 @@ import {
   ErrorState,
   LoadingState,
   Screen,
+  useToast,
 } from '@/components/ui';
 import { useSession } from '@/features/auth/SessionProvider';
 import {
@@ -33,6 +34,7 @@ export default function EditProductScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { activeWorkspace } = useSession();
   const workspaceId = activeWorkspace?.workspace.id ?? null;
+  const { showToast } = useToast();
 
   const [product, setProduct] = useState<ProductRow | null>(null);
   const [categories, setCategories] = useState<CategoryRow[]>([]);
@@ -97,6 +99,11 @@ export default function EditProductScreen() {
         );
       }
 
+      showToast({
+        tone: 'success',
+        title: 'Produto atualizado!',
+        message: 'As alterações foram salvas com sucesso.',
+      });
       router.back();
     } catch (error) {
       throw new Error(mapProductServiceError(error), { cause: error });

@@ -1,13 +1,13 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import {
   FormField,
   PrimaryButton,
   SecondaryButton,
+  useToast,
 } from '@/components/ui';
-import { colors, radius, spacing, typography } from '@/constants/theme';
+import { colors, radius, spacing } from '@/constants/theme';
 import {
   customerFormSchema,
   formatPhoneBR,
@@ -40,8 +40,8 @@ export function CustomerForm({
     address?: string;
     notes?: string;
   }>({});
-  const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { showToast } = useToast();
 
   function handlePhoneChange(nextValue: string): void {
     const digitsOnly = nextValue.replace(/\D/g, '');
@@ -58,7 +58,6 @@ export function CustomerForm({
     }
 
     setFieldErrors({});
-    setSubmitError(null);
 
     const candidate: CustomerFormInput = {
       fullName,
@@ -78,6 +77,11 @@ export function CustomerForm({
         address: issues.address?.[0],
         notes: issues.notes?.[0],
       });
+      showToast({
+        tone: 'warning',
+        title: 'Revise os dados do cliente',
+        message: 'Preencha corretamente os campos obrigatórios.',
+      });
       return;
     }
 
@@ -89,7 +93,11 @@ export function CustomerForm({
         error instanceof Error
           ? error.message
           : 'Não foi possível salvar os dados do cliente.';
-      setSubmitError(message);
+      showToast({
+        tone: 'error',
+        title: 'Erro ao salvar cliente',
+        message,
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -97,13 +105,6 @@ export function CustomerForm({
 
   return (
     <View style={styles.card}>
-      {submitError ? (
-        <View style={styles.errorAlert} accessibilityRole="alert">
-          <Ionicons name="alert-circle" size={18} color={colors.error} />
-          <Text style={styles.errorAlertText}>{submitError}</Text>
-        </View>
-      ) : null}
-
       <FormField
         label="Nome completo *"
         placeholder="Ex.: Ana Souza"
@@ -190,22 +191,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.xl,
-  },
-  errorAlert: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.errorSoft,
-    borderWidth: 1,
-    borderColor: colors.error,
-    borderRadius: radius.control,
-    padding: spacing.md,
-    marginBottom: spacing.lg,
-  },
-  errorAlertText: {
-    ...typography.body,
-    color: colors.error,
-    flex: 1,
   },
   multilineInput: {
     minHeight: 72,

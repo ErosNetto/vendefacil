@@ -9,7 +9,7 @@ import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { LoadingState } from '@/components/ui';
+import { LoadingState, ToastProvider } from '@/components/ui';
 import { colors } from '@/constants/theme';
 import { SessionProvider, useSession } from '@/features/auth/SessionProvider';
 import { configureTypographyScaling } from '@/utils/configureTypographyScaling';
@@ -82,35 +82,37 @@ function NavigationGuard({ children }: { children: React.ReactNode }) {
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
-      <SessionProvider>
-        <StatusBar style="dark" />
-        <NavigationGuard>
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: colors.background },
-            }}
-          >
-            <Stack.Screen name="index" />
-            <Stack.Screen name="(auth)" />
-            <Stack.Screen name="(onboarding)" />
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="customers/index" />
-            <Stack.Screen name="customers/new" />
-            <Stack.Screen name="customers/[id]/index" />
-            <Stack.Screen name="customers/[id]/edit" />
-            <Stack.Screen name="products/index" />
-            <Stack.Screen name="products/new" />
-            <Stack.Screen name="products/[id]/index" />
-            <Stack.Screen name="products/[id]/edit" />
-            <Stack.Screen name="inventory/adjust" />
-            <Stack.Screen name="inventory/movements" />
-            <Stack.Screen name="sales/new" />
-            <Stack.Screen name="sales/[id]/index" />
-            <Stack.Screen name="settings" />
-          </Stack>
-        </NavigationGuard>
-      </SessionProvider>
+      <ToastProvider>
+        <SessionProvider>
+          <StatusBar style="dark" />
+          <NavigationGuard>
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: colors.background },
+              }}
+            >
+              <Stack.Screen name="index" />
+              <Stack.Screen name="(auth)" />
+              <Stack.Screen name="(onboarding)" />
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="customers/index" />
+              <Stack.Screen name="customers/new" />
+              <Stack.Screen name="customers/[id]/index" />
+              <Stack.Screen name="customers/[id]/edit" />
+              <Stack.Screen name="products/index" />
+              <Stack.Screen name="products/new" />
+              <Stack.Screen name="products/[id]/index" />
+              <Stack.Screen name="products/[id]/edit" />
+              <Stack.Screen name="inventory/adjust" />
+              <Stack.Screen name="inventory/movements" />
+              <Stack.Screen name="sales/new" />
+              <Stack.Screen name="sales/[id]/index" />
+              <Stack.Screen name="settings" />
+            </Stack>
+          </NavigationGuard>
+        </SessionProvider>
+      </ToastProvider>
     </SafeAreaProvider>
   );
 }

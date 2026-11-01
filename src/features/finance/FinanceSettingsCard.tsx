@@ -6,6 +6,7 @@ import {
   FormField,
   PrimaryButton,
   StatusBadge,
+  useToast,
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import {
@@ -28,6 +29,7 @@ export function FinanceSettingsCard({
   onUpdated,
 }: FinanceSettingsCardProps) {
   const currentSettings = getWorkspaceFinanceSettings(workspace);
+  const { showToast } = useToast();
 
   const [lateFeeEnabled, setLateFeeEnabled] = useState(
     currentSettings.lateFeeEnabled,
@@ -42,8 +44,6 @@ export function FinanceSettingsCard({
     String(currentSettings.gracePeriodDays),
   );
   const [isSaving, setIsSaving] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const next = getWorkspaceFinanceSettings(workspace);
@@ -67,9 +67,6 @@ export function FinanceSettingsCard({
       return;
     }
 
-    setErrorMessage(null);
-    setSuccessMessage(null);
-
     const validation = validateFinanceSettingsInput({
       lateFeeEnabled,
       finePercentInput,
@@ -78,9 +75,11 @@ export function FinanceSettingsCard({
     });
 
     if (!validation.success || !validation.payload) {
-      setErrorMessage(
-        validation.errorMessage ?? 'Revise os parâmetros informados.',
-      );
+      showToast({
+        tone: 'warning',
+        title: 'Revise as regras de cobrança',
+        message: validation.errorMessage ?? 'Verifique os percentuais informados.',
+      });
       return;
     }
 
@@ -96,9 +95,17 @@ export function FinanceSettingsCard({
       });
 
       await onUpdated();
-      setSuccessMessage('Regras padrão de cobrança atualizadas com sucesso!');
+      showToast({
+        tone: 'success',
+        title: 'Regras de cobrança salvas!',
+        message: 'Os padrões de multa e juros foram atualizados com sucesso.',
+      });
     } catch (error) {
-      setErrorMessage(mapFinanceServiceError(error));
+      showToast({
+        tone: 'error',
+        title: 'Erro ao salvar regras',
+        message: mapFinanceServiceError(error),
+      });
     } finally {
       setIsSaving(false);
     }
@@ -125,8 +132,6 @@ export function FinanceSettingsCard({
         accessibilityState={{ checked: lateFeeEnabled }}
         onPress={() => {
           setLateFeeEnabled((prev) => !prev);
-          setSuccessMessage(null);
-          setErrorMessage(null);
         }}
         style={[
           styles.toggleBox,
@@ -159,8 +164,6 @@ export function FinanceSettingsCard({
             value={finePercentInput}
             onChangeText={(val) => {
               setFinePercentInput(val);
-              setErrorMessage(null);
-              setSuccessMessage(null);
             }}
           />
         </View>
@@ -172,8 +175,6 @@ export function FinanceSettingsCard({
             value={monthlyInterestInput}
             onChangeText={(val) => {
               setMonthlyInterestInput(val);
-              setErrorMessage(null);
-              setSuccessMessage(null);
             }}
           />
         </View>
@@ -186,23 +187,9 @@ export function FinanceSettingsCard({
         value={graceDaysInput}
         onChangeText={(val) => {
           setGraceDaysInput(val);
-          setErrorMessage(null);
-          setSuccessMessage(null);
         }}
         helperText="Ex.: 0 cobra a partir de 1 dia de atraso; 3 só cobra a partir do 4º dia."
       />
-
-      {errorMessage ? (
-        <View style={styles.errorBanner}>
-          <Text style={styles.errorText}>{errorMessage}</Text>
-        </View>
-      ) : null}
-
-      {successMessage ? (
-        <View style={styles.successBanner}>
-          <Text style={styles.successText}>{successMessage}</Text>
-        </View>
-      ) : null}
 
       <PrimaryButton
         label="Salvar regras de cobrança"
@@ -278,28 +265,5 @@ const styles = StyleSheet.create({
   },
   col: {
     flex: 1,
-  },
-  errorBanner: {
-    backgroundColor: colors.errorSoft,
-    borderRadius: radius.control,
-    borderWidth: 1,
-    borderColor: colors.error,
-    padding: spacing.md,
-  },
-  errorText: {
-    ...typography.caption,
-    color: colors.error,
-  },
-  successBanner: {
-    backgroundColor: colors.primarySoft,
-    borderRadius: radius.control,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    padding: spacing.md,
-  },
-  successText: {
-    ...typography.caption,
-    color: colors.primaryDark,
-    fontWeight: '600',
   },
 });

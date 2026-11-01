@@ -6,6 +6,7 @@ import {
   ErrorState,
   LoadingState,
   Screen,
+  useToast,
 } from '@/components/ui';
 import { useSession } from '@/features/auth/SessionProvider';
 import { CustomerForm } from '@/features/customers/CustomerForm';
@@ -21,6 +22,7 @@ export default function EditCustomerScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { activeWorkspace } = useSession();
+  const { showToast } = useToast();
   const workspaceId = activeWorkspace?.workspace.id ?? null;
 
   const [customer, setCustomer] = useState<CustomerRow | null>(null);
@@ -60,6 +62,11 @@ export default function EditCustomerScreen() {
 
     try {
       await updateWorkspaceCustomer(workspaceId, customer.id, values);
+      showToast({
+        tone: 'success',
+        title: 'Cliente atualizado!',
+        message: 'Os dados do cliente foram atualizados com sucesso.',
+      });
       router.back();
     } catch (error) {
       throw new Error(mapCustomerServiceError(error), { cause: error });

@@ -19,6 +19,7 @@ import {
   PrimaryButton,
   Screen,
   useScrollToTop,
+  useToast,
 } from '@/components/ui';
 import { colors, spacing, typography } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
@@ -43,6 +44,7 @@ export default function EditExpenseScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { activeWorkspace } = useSession();
+  const { showToast } = useToast();
   const workspaceId = activeWorkspace?.workspace.id ?? null;
 
   const [isLoading, setIsLoading] = useState(true);
@@ -62,7 +64,6 @@ export default function EditExpenseScreen() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [generalError, setGeneralError] = useState<string | null>(null);
 
   const loadInitialData = useCallback(async () => {
     if (!workspaceId || !id) return;
@@ -115,7 +116,6 @@ export default function EditExpenseScreen() {
     if (!workspaceId || !id || isSubmitting) return;
 
     setFieldErrors({});
-    setGeneralError(null);
 
     const expenseDate = parseBRDateInputToISO(expenseDateBR) ?? '';
 
@@ -138,6 +138,11 @@ export default function EditExpenseScreen() {
         }
       }
       setFieldErrors(errors);
+      showToast({
+        tone: 'warning',
+        title: 'Revise os dados da despesa',
+        message: 'Preencha a descrição, valor e data corretamente.',
+      });
       return;
     }
 
@@ -149,13 +154,21 @@ export default function EditExpenseScreen() {
         expenseId: id,
         payload,
       });
+      showToast({
+        tone: 'success',
+        title: 'Despesa atualizada!',
+        message: `${description} (${amountInput}) atualizada com sucesso.`,
+      });
       router.back();
     } catch (error) {
-      setGeneralError(
-        error instanceof Error
-          ? error.message
-          : 'Não foi possível atualizar a despesa.',
-      );
+      showToast({
+        tone: 'error',
+        title: 'Erro ao atualizar despesa',
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Não foi possível atualizar a despesa.',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -170,6 +183,7 @@ export default function EditExpenseScreen() {
     paymentMethod,
     notes,
     router,
+    showToast,
   ]);
 
   const { scrollRef, showScrollToTop, handleScroll, scrollToTop } =
@@ -229,16 +243,6 @@ export default function EditExpenseScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
-          {generalError ? (
-            <View style={styles.errorContainer}>
-              <ErrorState
-                title="Erro ao salvar"
-                message={generalError}
-                onRetry={handleSubmit}
-              />
-            </View>
-          ) : null}
-
           <FormField
             label="Descrição da despesa *"
             value={description}
@@ -326,9 +330,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: spacing.xxl,
     gap: spacing.md,
-  },
-  errorContainer: {
-    marginBottom: spacing.xs,
   },
   sectionBlock: {
     gap: spacing.xs,

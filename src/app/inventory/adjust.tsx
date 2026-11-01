@@ -99,7 +99,6 @@ export default function InventoryAdjustScreen() {
     unitCostInput?: string;
     unitPriceInput?: string;
   }>({});
-  const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Mantém a mesma chave de idempotência para proteger contra retry / duplo toque (RF-035)
@@ -296,7 +295,6 @@ export default function InventoryAdjustScreen() {
       return;
     }
 
-    setSubmitError(null);
     setFieldErrors({});
 
     const parsed = stockAdjustmentFormSchema.safeParse({
@@ -348,13 +346,23 @@ export default function InventoryAdjustScreen() {
         unitPriceCents: normalized.unitPriceCents,
       });
 
+      showToast({
+        tone: 'success',
+        title: 'Estoque atualizado!',
+        message: `${selectedProduct?.name ?? 'Produto'}: ${movementMeta.label.toLowerCase()} de ${normalized.quantity} un. registrada.`,
+      });
+
       if (router.canGoBack()) {
         router.back();
       } else {
         router.replace('/(tabs)/inventory');
       }
     } catch (error) {
-      setSubmitError(mapInventoryServiceError(error));
+      showToast({
+        tone: 'error',
+        title: 'Erro ao movimentar estoque',
+        message: mapInventoryServiceError(error),
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -819,12 +827,6 @@ export default function InventoryAdjustScreen() {
           </View>
         ) : null}
 
-        {submitError ? (
-          <View style={styles.errorBanner}>
-            <Text style={styles.errorBannerText}>{submitError}</Text>
-          </View>
-        ) : null}
-
         <View style={styles.actionsColumn}>
           <PrimaryButton
             label="Confirmar movimentação"
@@ -1193,18 +1195,6 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.error,
     marginTop: spacing.xs,
-  },
-  errorBanner: {
-    backgroundColor: colors.errorSoft,
-    borderRadius: radius.control,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.error,
-    marginBottom: spacing.lg,
-  },
-  errorBannerText: {
-    ...typography.caption,
-    color: colors.error,
   },
   actionsColumn: {
     gap: spacing.sm,
