@@ -52,7 +52,15 @@ export function PrimaryButton({
       ) : (
         <View style={styles.row}>
           {iconName ? <Ionicons name={iconName} size={18} color={colors.white} /> : null}
-          <Text style={styles.primaryLabel}>{label}</Text>
+          <Text
+            style={styles.primaryLabel}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.82}
+            maxFontSizeMultiplier={1.05}
+          >
+            {label}
+          </Text>
         </View>
       )}
     </Pressable>
@@ -91,7 +99,15 @@ export function SecondaryButton({
       ) : (
         <View style={styles.row}>
           {iconName ? <Ionicons name={iconName} size={18} color={colors.primary} /> : null}
-          <Text style={styles.secondaryLabel}>{label}</Text>
+          <Text
+            style={styles.secondaryLabel}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.82}
+            maxFontSizeMultiplier={1.05}
+          >
+            {label}
+          </Text>
         </View>
       )}
     </Pressable>
@@ -112,6 +128,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
+    maxWidth: '100%',
   },
   primary: {
     backgroundColor: colors.primary,
@@ -135,10 +152,14 @@ const styles = StyleSheet.create({
     ...typography.bodyStrong,
     fontSize: 16,
     color: colors.white,
+    flexShrink: 1,
+    textAlign: 'center',
   },
   secondaryLabel: {
     ...typography.bodyStrong,
     fontSize: 16,
     color: colors.text,
+    flexShrink: 1,
+    textAlign: 'center',
   },
 });

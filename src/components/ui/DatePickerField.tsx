@@ -216,7 +216,13 @@ export function DatePickerField({
                 />
               </Pressable>
 
-              <Text style={styles.monthTitle}>
+              <Text
+                style={styles.monthTitle}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.85}
+                maxFontSizeMultiplier={1.05}
+              >
                 {MONTH_NAMES_PT_BR[viewMonth]} de {viewYear}
               </Text>
 
@@ -315,6 +321,7 @@ export function DatePickerField({
                           ]}
                         >
                           <Text
+                            maxFontSizeMultiplier={1.05}
                             style={[
                               styles.dayCellText,
                               isSelected ? styles.dayCellTextSelected : null,

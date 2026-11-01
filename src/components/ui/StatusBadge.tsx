@@ -48,7 +48,13 @@ export function StatusBadge({ label, tone = 'neutral' }: StatusBadgeProps) {
   return (
     <View style={[styles.badge, { backgroundColor: palette.bg }]}>
       <Ionicons name={palette.icon} size={14} color={palette.fg} />
-      <Text style={[styles.badgeText, { color: palette.fg }]}>{label}</Text>
+      <Text
+        style={[styles.badgeText, { color: palette.fg }]}
+        numberOfLines={1}
+        maxFontSizeMultiplier={1.05}
+      >
+        {label}
+      </Text>
     </View>
   );
 }
@@ -81,7 +87,13 @@ export function MoneyText({
         : typography.section;
 
   return (
-    <Text style={[sizeStyle, { color: colorMap[tone] }, style]}>
+    <Text
+      style={[sizeStyle, { color: colorMap[tone] }, style]}
+      numberOfLines={1}
+      adjustsFontSizeToFit
+      minimumFontScale={0.8}
+      maxFontSizeMultiplier={1.08}
+    >
       {formatCentsToBRL(cents)}
     </Text>
   );
@@ -105,13 +117,27 @@ export function MetricCard({
   return (
     <View style={styles.metricCard}>
       <View style={styles.metricHeader}>
-        <Text style={styles.metricTitle}>{title}</Text>
+        <Text
+          style={styles.metricTitle}
+          numberOfLines={2}
+          maxFontSizeMultiplier={1.08}
+        >
+          {title}
+        </Text>
         <View style={styles.metricIconBadge}>
           <Ionicons name={iconName} size={18} color={colors.primary} />
         </View>
       </View>
       <MoneyText cents={cents} size="lg" tone={tone} />
-      {subtitle ? <Text style={styles.metricSubtitle}>{subtitle}</Text> : null}
+      {subtitle ? (
+        <Text
+          style={styles.metricSubtitle}
+          numberOfLines={2}
+          maxFontSizeMultiplier={1.08}
+        >
+          {subtitle}
+        </Text>
+      ) : null}
     </View>
   );
 }

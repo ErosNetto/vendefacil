@@ -93,7 +93,11 @@ export const ProductCard = memo(function ProductCard({
         </Text>
         <View style={styles.priceRow}>
           <MoneyText cents={product.price_cents} size="sm" tone="primary" />
-          <Text style={styles.stockText}>
+          <Text
+            style={styles.stockText}
+            numberOfLines={1}
+            maxFontSizeMultiplier={1.08}
+          >
             • Estoque: {currentStock}
           </Text>
         </View>
@@ -154,6 +158,7 @@ const styles = StyleSheet.create({
   },
   infoColumn: {
     flex: 1,
+    minWidth: 0,
     gap: 2,
   },
   name: {
@@ -174,6 +179,7 @@ const styles = StyleSheet.create({
   stockText: {
     ...typography.caption,
     color: colors.textSecondary,
+    flexShrink: 1,
   },
   rightColumn: {
     flexDirection: 'row',

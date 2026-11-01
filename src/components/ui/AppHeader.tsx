@@ -49,11 +49,22 @@ export function AppHeader({
           </Pressable>
         ) : null}
         <View style={styles.textColumn}>
-          <Text style={styles.title} accessibilityRole="header" numberOfLines={1}>
+          <Text
+            style={styles.title}
+            accessibilityRole="header"
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.82}
+            maxFontSizeMultiplier={1.08}
+          >
             {title}
           </Text>
           {subtitle ? (
-            <Text style={styles.subtitle} numberOfLines={1}>
+            <Text
+              style={styles.subtitle}
+              numberOfLines={1}
+              maxFontSizeMultiplier={1.1}
+            >
               {subtitle}
             </Text>
           ) : null}

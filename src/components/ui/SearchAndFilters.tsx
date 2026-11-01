@@ -40,6 +40,7 @@ export function SearchField({
         autoCapitalize="none"
         autoCorrect={false}
         returnKeyType="search"
+        maxFontSizeMultiplier={1.1}
         style={styles.searchInput}
       />
       {value.length > 0 ? (
@@ -106,6 +107,8 @@ export function FilterChips<T extends string>({
               ]}
             >
               <Text
+                numberOfLines={1}
+                maxFontSizeMultiplier={1.05}
                 style={[
                   styles.chipText,
                   isSelected ? styles.chipTextSelected : styles.chipTextUnselected,

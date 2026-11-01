@@ -12,6 +12,9 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { LoadingState } from '@/components/ui';
 import { colors } from '@/constants/theme';
 import { SessionProvider, useSession } from '@/features/auth/SessionProvider';
+import { configureTypographyScaling } from '@/utils/configureTypographyScaling';
+
+configureTypographyScaling();
 
 function NavigationGuard({ children }: { children: React.ReactNode }) {
   const {

@@ -47,6 +47,8 @@ export function PeriodSegmentedControl<T extends string>({
               ]}
               numberOfLines={1}
               adjustsFontSizeToFit
+              minimumFontScale={0.8}
+              maxFontSizeMultiplier={1.05}
             >
               {opt.label}
             </Text>

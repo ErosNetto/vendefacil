@@ -106,6 +106,7 @@ const styles = StyleSheet.create({
   },
   infoColumn: {
     flex: 1,
+    minWidth: 0,
     gap: 2,
   },
   name: {
