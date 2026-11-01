@@ -117,6 +117,17 @@ export default function LoginScreen() {
           editable={!isSubmitting}
         />
 
+        <View style={styles.forgotPasswordRow}>
+          <Pressable
+            onPress={() => router.push('/(auth)/forgot-password')}
+            accessibilityRole="button"
+            accessibilityLabel="Esqueceu sua senha"
+            hitSlop={8}
+          >
+            <Text style={styles.forgotPasswordLink}>Esqueceu sua senha?</Text>
+          </Pressable>
+        </View>
+
         <PrimaryButton
           label="Entrar"
           onPress={() => {
@@ -187,6 +198,15 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.textSecondary,
     marginBottom: spacing.xl,
+  },
+  forgotPasswordRow: {
+    alignItems: 'flex-end',
+    marginTop: -spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  forgotPasswordLink: {
+    ...typography.caption,
+    color: colors.primary,
   },
   footerRow: {
     flexDirection: 'row',

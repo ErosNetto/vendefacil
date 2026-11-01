@@ -10,7 +10,7 @@
 - [x] Design tokens/componentes base.
 - [x] Navegação e layouts.
 - [x] Cliente Supabase com sessão segura.
-- [x] Login, cadastro, logout, loading/erro.
+- [x] Login, cadastro, recuperação/redefinição de senha com deep linking, logout, loading/erro.
 - [x] Criar workspace com RPC segura (`supabase/migrations/20261017000001_phase1_foundation.sql`).
 - [x] Tela de onboarding/sem workspace.
 

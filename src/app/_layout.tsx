@@ -33,9 +33,18 @@ function NavigationGuard({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const firstSegment = segments[0];
+    const segmentList = segments as string[];
+    const firstSegment = segmentList[0];
+    const secondSegment = segmentList[1];
     const inAuthGroup = firstSegment === '(auth)';
     const inOnboardingGroup = firstSegment === '(onboarding)';
+    const isResetPasswordRoute =
+      (inAuthGroup && secondSegment === 'reset-password') ||
+      firstSegment === 'reset-password';
+
+    if (isResetPasswordRoute) {
+      return;
+    }
 
     if (!session) {
       if (!inAuthGroup) {
@@ -125,10 +134,12 @@ const styles = StyleSheet.create({
   splashOverlay: {
     position: 'absolute',
     top: 0,
+    left: 0,
     right: 0,
     bottom: 0,
-    left: 0,
     backgroundColor: colors.background,
-    zIndex: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 9999,
   },
 });

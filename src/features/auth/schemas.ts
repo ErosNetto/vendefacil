@@ -41,6 +41,32 @@ export const signUpSchema = z
 
 export type SignUpInput = z.infer<typeof signUpSchema>;
 
+export const forgotPasswordSchema = z.object({
+  email: z
+    .string()
+    .trim()
+    .min(1, 'Informe seu e-mail.')
+    .email('Informe um endereço de e-mail válido.')
+    .transform((val) => val.toLowerCase()),
+});
+
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+
+export const resetPasswordSchema = z
+  .object({
+    password: z
+      .string()
+      .min(8, 'A nova senha deve ter pelo menos 8 caracteres.')
+      .max(128, 'A senha deve ter no máximo 128 caracteres.'),
+    confirmPassword: z.string().min(1, 'Confirme sua nova senha.'),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: 'As senhas informadas não coincidem.',
+    path: ['confirmPassword'],
+  });
+
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+
 /**
  * Traduz erros do Supabase Auth para mensagens amigáveis em português brasileiro,
  * sem expor detalhes internos ou dados sensíveis nos logs.
@@ -69,6 +95,14 @@ export function mapAuthErrorMessage(error: unknown): string {
   }
   if (rawMessage.includes('rate limit') || rawMessage.includes('too many requests')) {
     return 'Muitas tentativas em sequência. Aguarde alguns instantes antes de tentar novamente.';
+  }
+  if (
+    rawMessage.includes('token has expired') ||
+    rawMessage.includes('otp_expired') ||
+    rawMessage.includes('bad_jwt') ||
+    rawMessage.includes('invalid token')
+  ) {
+    return 'O link de recuperação expirou ou é inválido. Solicite um novo link.';
   }
   if (rawMessage.includes('network') || rawMessage.includes('fetch')) {
     return 'Sem conexão com o servidor. Verifique sua internet e a configuração do Supabase.';

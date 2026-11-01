@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  forgotPasswordSchema,
   loginSchema,
   mapAuthErrorMessage,
+  resetPasswordSchema,
   signUpSchema,
 } from '@/features/auth/schemas';
 import {
@@ -51,6 +53,41 @@ describe('signUpSchema', () => {
   });
 });
 
+describe('forgotPasswordSchema & resetPasswordSchema', () => {
+  it('valida e normaliza e-mail no esqueci minha senha', () => {
+    const valid = forgotPasswordSchema.safeParse({
+      email: '  Usuario@Loja.Com  ',
+    });
+    expect(valid.success).toBe(true);
+    if (valid.success) {
+      expect(valid.data.email).toBe('usuario@loja.com');
+    }
+
+    const invalid = forgotPasswordSchema.safeParse({ email: 'sem-arroba' });
+    expect(invalid.success).toBe(false);
+  });
+
+  it('exige senha com no mínimo 8 caracteres e confirmação idêntica', () => {
+    const short = resetPasswordSchema.safeParse({
+      password: '12345',
+      confirmPassword: '12345',
+    });
+    expect(short.success).toBe(false);
+
+    const mismatch = resetPasswordSchema.safeParse({
+      password: 'minhaNovaSenha123',
+      confirmPassword: 'outraSenhaDiferente',
+    });
+    expect(mismatch.success).toBe(false);
+
+    const valid = resetPasswordSchema.safeParse({
+      password: 'minhaNovaSenha123',
+      confirmPassword: 'minhaNovaSenha123',
+    });
+    expect(valid.success).toBe(true);
+  });
+});
+
 describe('createWorkspaceSchema & getRoleLabelPtBR', () => {
   it('valida nome do workspace entre 2 e 80 caracteres', () => {
     expect(createWorkspaceSchema.safeParse({ name: 'A' }).success).toBe(false);
@@ -75,5 +112,8 @@ describe('mapAuthErrorMessage', () => {
     expect(
       mapAuthErrorMessage(new Error('User already registered')),
     ).toContain('Já existe uma conta cadastrada');
+    expect(
+      mapAuthErrorMessage(new Error('Token has expired or is invalid')),
+    ).toContain('link de recuperação expirou');
   });
 });

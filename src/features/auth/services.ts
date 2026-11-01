@@ -71,6 +71,47 @@ export async function signUpWithEmail(
   };
 }
 
+export async function requestPasswordReset(email: string): Promise<void> {
+  ensureSupabaseConfigured();
+
+  const cleanEmail = email.trim().toLowerCase();
+  const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+    redirectTo: 'vendefacil://reset-password',
+  });
+
+  if (error) {
+    throw error;
+  }
+}
+
+export async function updateUserPassword(newPassword: string): Promise<void> {
+  ensureSupabaseConfigured();
+
+  const { error } = await supabase.auth.updateUser({
+    password: newPassword,
+  });
+
+  if (error) {
+    throw error;
+  }
+}
+
+export async function setAuthSessionFromTokens(
+  accessToken: string,
+  refreshToken: string,
+): Promise<void> {
+  ensureSupabaseConfigured();
+
+  const { error } = await supabase.auth.setSession({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+  });
+
+  if (error) {
+    throw error;
+  }
+}
+
 export async function signOutUser(): Promise<void> {
   if (!supabaseEnvStatus.isConfigured) {
     return;
