@@ -110,6 +110,83 @@ export default function CustomersListScreen() {
 
   const isFiltered = Boolean(debouncedSearch.trim()) || statusFilter !== 'all';
 
+  const listHeader = useMemo(() => {
+    if (counts.all === 0 && !isFiltered) {
+      return undefined;
+    }
+    return (
+      <>
+        <SearchField
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Buscar por nome, telefone ou e-mail..."
+          accessibilityLabel="Buscar cliente"
+        />
+
+        <FilterChips
+          options={filterOptions}
+          selectedKey={statusFilter}
+          onSelect={setStatusFilter}
+        />
+
+        {customers.length > 0 ? (
+          <ListCounterBanner
+            totalCount={totalCount}
+            displayedCount={displayedCount}
+            nounSingular="cliente"
+            nounPlural="clientes"
+            isFiltered={isFiltered}
+          />
+        ) : null}
+      </>
+    );
+  }, [
+    counts.all,
+    isFiltered,
+    searchQuery,
+    filterOptions,
+    statusFilter,
+    customers.length,
+    totalCount,
+    displayedCount,
+  ]);
+
+  const listEmptyComponent = useMemo(() => {
+    return (
+      <EmptyState
+        iconName="people-outline"
+        title={
+          debouncedSearch.trim()
+            ? 'Nenhum cliente encontrado para a busca'
+            : statusFilter === 'archived'
+              ? 'Nenhum cliente arquivado'
+              : 'Sua carteira de clientes está vazia'
+        }
+        description={
+          debouncedSearch.trim()
+            ? 'Tente outro termo de pesquisa ou altere o filtro de status acima.'
+            : statusFilter === 'archived'
+              ? 'Clientes arquivados aparecem aqui com todo o histórico preservado.'
+              : 'Cadastre seus clientes para acompanhar compras, parcelas e recebimentos.'
+        }
+        actionLabel={
+          debouncedSearch.trim()
+            ? 'Limpar busca'
+            : statusFilter === 'active'
+              ? 'Cadastrar primeiro cliente'
+              : undefined
+        }
+        onActionPress={
+          debouncedSearch.trim()
+            ? () => setSearchQuery('')
+            : statusFilter === 'active'
+              ? () => router.push('/customers/new')
+              : undefined
+        }
+      />
+    );
+  }, [debouncedSearch, statusFilter, router]);
+
   const handlePressCustomer = useCallback(
     (customerId: string) => {
       router.push(`/customers/${customerId}`);
@@ -155,19 +232,6 @@ export default function CustomersListScreen() {
         }
       />
 
-      <SearchField
-        value={searchQuery}
-        onChangeText={setSearchQuery}
-        placeholder="Buscar por nome, telefone ou e-mail..."
-        accessibilityLabel="Buscar cliente"
-      />
-
-      <FilterChips
-        options={filterOptions}
-        selectedKey={statusFilter}
-        onSelect={setStatusFilter}
-      />
-
       {isLoading ? (
         <LoadingState message="Carregando carteira de clientes..." />
       ) : errorMessage ? (
@@ -178,38 +242,6 @@ export default function CustomersListScreen() {
             void refresh();
           }}
         />
-      ) : customers.length === 0 ? (
-        <EmptyState
-          iconName="people-outline"
-          title={
-            debouncedSearch.trim()
-              ? 'Nenhum cliente encontrado para a busca'
-              : statusFilter === 'archived'
-                ? 'Nenhum cliente arquivado'
-                : 'Sua carteira de clientes está vazia'
-          }
-          description={
-            debouncedSearch.trim()
-              ? 'Tente outro termo de pesquisa ou altere o filtro de status acima.'
-              : statusFilter === 'archived'
-                ? 'Clientes arquivados aparecem aqui com todo o histórico preservado.'
-                : 'Cadastre seus clientes para acompanhar compras, parcelas e recebimentos.'
-          }
-          actionLabel={
-            debouncedSearch.trim()
-              ? 'Limpar busca'
-              : statusFilter === 'active'
-                ? 'Cadastrar primeiro cliente'
-                : undefined
-          }
-          onActionPress={
-            debouncedSearch.trim()
-              ? () => setSearchQuery('')
-              : statusFilter === 'active'
-                ? () => router.push('/customers/new')
-                : undefined
-          }
-        />
       ) : (
         <FlatList
           ref={scrollRef}
@@ -219,15 +251,8 @@ export default function CustomersListScreen() {
           keyExtractor={keyExtractor}
           renderItem={renderItem}
           ItemSeparatorComponent={renderSeparator}
-          ListHeaderComponent={
-            <ListCounterBanner
-              totalCount={totalCount}
-              displayedCount={displayedCount}
-              nounSingular="cliente"
-              nounPlural="clientes"
-              isFiltered={isFiltered}
-            />
-          }
+          ListHeaderComponent={listHeader}
+          ListEmptyComponent={listEmptyComponent}
           ListFooterComponent={
             <ListFooterLoader
               isLoadingMore={isLoadingMore}
@@ -266,6 +291,7 @@ export default function CustomersListScreen() {
 
 const styles = StyleSheet.create({
   listContent: {
+    flexGrow: 1,
     paddingBottom: spacing.xxl,
   },
   separator: {

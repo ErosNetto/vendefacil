@@ -74,6 +74,7 @@
 - [x] Leitor de código de barras via câmera (`expo-camera`, `BarcodeScannerModal`) com preenchimento inteligente de dados em cascata (Catálogo próprio, Open Beauty Facts, Open Products Facts, Open Food Facts e UPCitemdb) no cadastro de produto + adição/seleção rápida na Nova Venda e no Movimentar Estoque (`src/components/ui/BarcodeScannerModal.tsx`, `src/features/products/barcodeLookupService.ts`, `src/features/products/ProductForm.tsx`).
 - [x] Motor global de Toast 60fps nativo estilo Sonner / Dynamic Island (`ToastProvider`, `useToast`, `showGlobalToast` em `src/components/ui/Toast.tsx` e `src/app/_layout.tsx`), substituindo banners estáticos e alertas bloqueantes em todo o app (Vendas, Estoque, Clientes, Produtos, Despesas, Relatórios, Auth e WhatsApp).
 - [x] Otimização de UI/UX em fluxos de carregamento: abertura a 0ms de novos formulários (Produtos e Despesas) com chips inline assíncronos e eliminação de telas de loading bloqueantes após ações de botão (confirmação/cancelamento de venda, baixa de parcelas e revalidação de detalhes in-place com `hasLoadedRef`).
+- [x] Padronização do gesto pull-to-refresh em Catálogo e Clientes: integração do campo de busca e chips de filtro ao `ListHeaderComponent` e `ListEmptyComponent` do `FlatList`, alinhando a animação de recarregamento ao topo do `AppHeader` como em Vendas, Estoque e Despesas (`src/app/products/index.tsx`, `src/app/customers/index.tsx`).
 
 ## Fase 9 — APK
 - [x] Testes RLS e fluxos ponta a ponta (`supabase/tests/phase9_final_rls_and_pricing_test.sql` + 79 testes automatizados com Vitest).

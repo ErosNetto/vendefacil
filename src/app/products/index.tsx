@@ -145,6 +145,95 @@ export default function ProductsCatalogScreen() {
     [router],
   );
 
+  const listHeader = useMemo(() => {
+    if (counts.all === 0 && !isFiltered) {
+      return undefined;
+    }
+    return (
+      <>
+        <SearchField
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Buscar por nome, marca, SKU ou código..."
+          accessibilityLabel="Buscar produto"
+        />
+
+        {categories.length > 0 ? (
+          <FilterChips
+            options={categoryOptions}
+            selectedKey={selectedCategoryId}
+            onSelect={setSelectedCategoryId}
+          />
+        ) : null}
+
+        <FilterChips
+          options={statusOptions}
+          selectedKey={statusFilter}
+          onSelect={setStatusFilter}
+        />
+
+        {products.length > 0 ? (
+          <ListCounterBanner
+            totalCount={totalCount}
+            displayedCount={displayedCount}
+            nounSingular="produto"
+            nounPlural="produtos"
+            isFiltered={isFiltered}
+          />
+        ) : null}
+      </>
+    );
+  }, [
+    counts.all,
+    isFiltered,
+    searchQuery,
+    categories.length,
+    categoryOptions,
+    selectedCategoryId,
+    statusOptions,
+    statusFilter,
+    products.length,
+    totalCount,
+    displayedCount,
+  ]);
+
+  const listEmptyComponent = useMemo(() => {
+    return (
+      <EmptyState
+        iconName="pricetag-outline"
+        title={
+          debouncedSearch.trim() || selectedCategoryId !== 'all'
+            ? 'Nenhum produto encontrado para o filtro atual'
+            : statusFilter === 'archived'
+              ? 'Nenhum produto arquivado'
+              : 'Seu catálogo de produtos está vazio'
+        }
+        description={
+          debouncedSearch.trim() || selectedCategoryId !== 'all'
+            ? 'Limpe a busca ou selecione "Todas categorias" para ver todos os itens.'
+            : 'Cadastre seus produtos com fotos, preços e categorias para agilizar suas vendas.'
+        }
+        actionLabel={
+          debouncedSearch.trim() || selectedCategoryId !== 'all'
+            ? 'Limpar filtros'
+            : statusFilter === 'active'
+              ? 'Cadastrar primeiro produto'
+              : undefined
+        }
+        onActionPress={
+          debouncedSearch.trim() || selectedCategoryId !== 'all'
+            ? () => {
+                setSearchQuery('');
+                setSelectedCategoryId('all');
+              }
+            : statusFilter === 'active'
+              ? () => router.push('/products/new')
+              : undefined
+        }
+      />
+    );
+  }, [debouncedSearch, selectedCategoryId, statusFilter, router]);
+
   const { scrollRef, showScrollToTop, handleScroll, scrollToTop } =
     useScrollToTop<FlatList<ProductRow>>();
 
@@ -186,27 +275,6 @@ export default function ProductsCatalogScreen() {
         }
       />
 
-      <SearchField
-        value={searchQuery}
-        onChangeText={setSearchQuery}
-        placeholder="Buscar por nome, marca, SKU ou código..."
-        accessibilityLabel="Buscar produto"
-      />
-
-      {categories.length > 0 ? (
-        <FilterChips
-          options={categoryOptions}
-          selectedKey={selectedCategoryId}
-          onSelect={setSelectedCategoryId}
-        />
-      ) : null}
-
-      <FilterChips
-        options={statusOptions}
-        selectedKey={statusFilter}
-        onSelect={setStatusFilter}
-      />
-
       {isLoading ? (
         <LoadingState message="Carregando catálogo de produtos..." />
       ) : errorMessage ? (
@@ -216,39 +284,6 @@ export default function ProductsCatalogScreen() {
           onRetry={() => {
             void refresh();
           }}
-        />
-      ) : products.length === 0 ? (
-        <EmptyState
-          iconName="pricetag-outline"
-          title={
-            debouncedSearch.trim() || selectedCategoryId !== 'all'
-              ? 'Nenhum produto encontrado para o filtro atual'
-              : statusFilter === 'archived'
-                ? 'Nenhum produto arquivado'
-                : 'Seu catálogo de produtos está vazio'
-          }
-          description={
-            debouncedSearch.trim() || selectedCategoryId !== 'all'
-              ? 'Limpe a busca ou selecione "Todas categorias" para ver todos os itens.'
-              : 'Cadastre seus produtos com fotos, preços e categorias para agilizar suas vendas.'
-          }
-          actionLabel={
-            debouncedSearch.trim() || selectedCategoryId !== 'all'
-              ? 'Limpar filtros'
-              : statusFilter === 'active'
-                ? 'Cadastrar primeiro produto'
-                : undefined
-          }
-          onActionPress={
-            debouncedSearch.trim() || selectedCategoryId !== 'all'
-              ? () => {
-                  setSearchQuery('');
-                  setSelectedCategoryId('all');
-                }
-              : statusFilter === 'active'
-                ? () => router.push('/products/new')
-                : undefined
-          }
         />
       ) : (
         <FlatList
@@ -264,15 +299,8 @@ export default function ProductsCatalogScreen() {
           removeClippedSubviews={Platform.OS === 'android'}
           renderItem={renderItem}
           ItemSeparatorComponent={renderSeparator}
-          ListHeaderComponent={
-            <ListCounterBanner
-              totalCount={totalCount}
-              displayedCount={displayedCount}
-              nounSingular="produto"
-              nounPlural="produtos"
-              isFiltered={isFiltered}
-            />
-          }
+          ListHeaderComponent={listHeader}
+          ListEmptyComponent={listEmptyComponent}
           ListFooterComponent={
             <ListFooterLoader
               isLoadingMore={isLoadingMore}
@@ -306,6 +334,7 @@ export default function ProductsCatalogScreen() {
 
 const styles = StyleSheet.create({
   listContent: {
+    flexGrow: 1,
     paddingBottom: spacing.xxl,
   },
   separator: {
