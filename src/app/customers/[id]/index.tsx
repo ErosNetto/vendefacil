@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
@@ -90,47 +90,58 @@ export default function CustomerDetailScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [confirmArchiveVisible, setConfirmArchiveVisible] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
+  const hasLoadedRef = useRef(false);
 
-  const loadCustomer = useCallback(async () => {
-    if (!workspaceId || !id) {
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-    setErrorMessage(null);
-    try {
-      const record = await getWorkspaceCustomerById(workspaceId, id);
-      if (!record) {
-        setErrorMessage('Cliente não encontrado neste espaço de trabalho.');
-      } else {
-        setCustomer(record);
-        const [sales, installments, payments] = await Promise.all([
-          listWorkspaceSales({
-            workspaceId,
-            customerId: record.id,
-          }).catch(() => []),
-          listWorkspaceInstallments(workspaceId, {
-            customerId: record.id,
-          }).catch(() => []),
-          listWorkspacePayments(workspaceId, {
-            customerId: record.id,
-          }).catch(() => []),
-        ]);
-        setCustomerSales(sales);
-        setCustomerInstallments(installments);
-        setCustomerPayments(payments);
-      }
-    } catch (error) {
-      setErrorMessage(mapCustomerServiceError(error));
-    } finally {
-      setIsLoading(false);
-    }
+  useEffect(() => {
+    hasLoadedRef.current = false;
   }, [id, workspaceId]);
+
+  const loadCustomer = useCallback(
+    async (isSilent = false) => {
+      if (!workspaceId || !id) {
+        setIsLoading(false);
+        return;
+      }
+
+      if (!isSilent && !hasLoadedRef.current) {
+        setIsLoading(true);
+      }
+      setErrorMessage(null);
+      try {
+        const record = await getWorkspaceCustomerById(workspaceId, id);
+        if (!record) {
+          setErrorMessage('Cliente não encontrado neste espaço de trabalho.');
+        } else {
+          setCustomer(record);
+          const [sales, installments, payments] = await Promise.all([
+            listWorkspaceSales({
+              workspaceId,
+              customerId: record.id,
+            }).catch(() => []),
+            listWorkspaceInstallments(workspaceId, {
+              customerId: record.id,
+            }).catch(() => []),
+            listWorkspacePayments(workspaceId, {
+              customerId: record.id,
+            }).catch(() => []),
+          ]);
+          setCustomerSales(sales);
+          setCustomerInstallments(installments);
+          setCustomerPayments(payments);
+        }
+        hasLoadedRef.current = true;
+      } catch (error) {
+        setErrorMessage(mapCustomerServiceError(error));
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [id, workspaceId],
+  );
 
   useFocusEffect(
     useCallback(() => {
-      void loadCustomer();
+      void loadCustomer(true);
     }, [loadCustomer]),
   );
 
@@ -643,7 +654,7 @@ export default function CustomerDetailScreen() {
           onClose={() => setIsPaymentModalOpen(false)}
           onSuccess={() => {
             setIsPaymentModalOpen(false);
-            void loadCustomer();
+            void loadCustomer(true);
           }}
         />
       ) : null}

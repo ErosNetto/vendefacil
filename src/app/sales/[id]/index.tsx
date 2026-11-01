@@ -1,7 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import {
   AppHeader,
@@ -108,6 +116,11 @@ export default function SaleDetailScreen() {
   const [customerSearch, setCustomerSearch] = useState('');
   const [isLinkingCustomer, setIsLinkingCustomer] = useState(false);
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
+  const hasLoadedRef = useRef(false);
+
+  useEffect(() => {
+    hasLoadedRef.current = false;
+  }, [id, workspaceId]);
 
   const filteredCustomers = useMemo(() => {
     const q = customerSearch.trim().toLowerCase();
@@ -188,48 +201,54 @@ export default function SaleDetailScreen() {
     }
   }
 
-  const loadSaleDetail = useCallback(async () => {
-    if (!workspaceId || !id) {
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-    setErrorMessage(null);
-    try {
-      const [detail, saleInstallments, salePayments] = await Promise.all([
-        getWorkspaceSaleDetail(workspaceId, id),
-        listWorkspaceInstallments(workspaceId, { saleId: id }).catch(() => []),
-        listWorkspacePayments(workspaceId, { saleId: id }).catch(() => []),
-      ]);
-      if (!detail) {
-        setErrorMessage('Venda não encontrada neste espaço de trabalho.');
+  const loadSaleDetail = useCallback(
+    async (isSilent = false) => {
+      if (!workspaceId || !id) {
+        setIsLoading(false);
         return;
       }
-      setSale(detail.sale);
-      setItems(detail.items);
-      setInstallments(saleInstallments);
-      setPayments(salePayments);
 
-      if (detail.sale.customer_id) {
-        const cust = await getWorkspaceCustomerById(
-          workspaceId,
-          detail.sale.customer_id,
-        ).catch(() => null);
-        setCustomerPhone(cust?.phone ?? null);
-      } else {
-        setCustomerPhone(null);
+      if (!isSilent && !hasLoadedRef.current) {
+        setIsLoading(true);
       }
-    } catch (error) {
-      setErrorMessage(mapSaleServiceError(error));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [id, workspaceId]);
+      setErrorMessage(null);
+      try {
+        const [detail, saleInstallments, salePayments] = await Promise.all([
+          getWorkspaceSaleDetail(workspaceId, id),
+          listWorkspaceInstallments(workspaceId, { saleId: id }).catch(() => []),
+          listWorkspacePayments(workspaceId, { saleId: id }).catch(() => []),
+        ]);
+        if (!detail) {
+          setErrorMessage('Venda não encontrada neste espaço de trabalho.');
+          return;
+        }
+        setSale(detail.sale);
+        setItems(detail.items);
+        setInstallments(saleInstallments);
+        setPayments(salePayments);
+
+        if (detail.sale.customer_id) {
+          const cust = await getWorkspaceCustomerById(
+            workspaceId,
+            detail.sale.customer_id,
+          ).catch(() => null);
+          setCustomerPhone(cust?.phone ?? null);
+        } else {
+          setCustomerPhone(null);
+        }
+        hasLoadedRef.current = true;
+      } catch (error) {
+        setErrorMessage(mapSaleServiceError(error));
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [id, workspaceId],
+  );
 
   useFocusEffect(
     useCallback(() => {
-      void loadSaleDetail();
+      void loadSaleDetail(true);
     }, [loadSaleDetail]),
   );
 
@@ -242,7 +261,7 @@ export default function SaleDetailScreen() {
     try {
       await confirmWorkspaceDraftSale(workspaceId, sale.id);
       setConfirmDraftModalOpen(false);
-      await loadSaleDetail();
+      await loadSaleDetail(true);
       showToast({
         tone: 'success',
         title: 'Venda confirmada!',
@@ -280,7 +299,7 @@ export default function SaleDetailScreen() {
       await cancelWorkspaceSale(workspaceId, sale.id, parsed.data.reason);
       setShowCancelForm(false);
       setCancelReason('');
-      await loadSaleDetail();
+      await loadSaleDetail(true);
       showToast({
         tone: 'warning',
         title: 'Venda cancelada',
@@ -975,7 +994,7 @@ export default function SaleDetailScreen() {
           onClose={() => setIsPaymentModalOpen(false)}
           onSuccess={() => {
             setIsPaymentModalOpen(false);
-            void loadSaleDetail();
+            void loadSaleDetail(true);
           }}
         />
       ) : null}
@@ -1021,7 +1040,12 @@ export default function SaleDetailScreen() {
             />
 
             {isLoadingCustomers ? (
-              <LoadingState message="Carregando clientes..." />
+              <View style={styles.customerListLoading}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={styles.customerListLoadingText}>
+                  Carregando clientes...
+                </Text>
+              </View>
             ) : (
               <ScrollView
                 style={styles.customerListScroll}
@@ -1646,5 +1670,15 @@ const styles = StyleSheet.create({
   },
   customerPickerFooter: {
     paddingTop: spacing.xs,
+  },
+  customerListLoading: {
+    paddingVertical: spacing.xxl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+  },
+  customerListLoadingText: {
+    ...typography.caption,
+    color: colors.textSecondary,
   },
 });

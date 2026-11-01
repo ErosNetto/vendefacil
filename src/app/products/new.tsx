@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   AppHeader,
   ErrorState,
-  LoadingState,
   Screen,
   useToast,
 } from '@/components/ui';
@@ -96,22 +95,19 @@ export default function NewProductScreen() {
         subtitle="Cadastre preço, custo, categoria e foto privada."
         showBack
       />
-      {isLoadingCategories ? (
-        <LoadingState message="Preparando formulário..." />
-      ) : (
-        <ProductForm
-          workspaceId={workspaceId}
-          categories={categories}
-          onCategoryCreated={(cat) =>
-            setCategories((prev) =>
-              [...prev, cat].sort((a, b) => a.name.localeCompare(b.name)),
-            )
-          }
-          submitLabel="Salvar produto"
-          onSubmit={handleCreateProduct}
-          onCancel={() => router.back()}
-        />
-      )}
+      <ProductForm
+        workspaceId={workspaceId}
+        categories={categories}
+        isLoadingCategories={isLoadingCategories}
+        onCategoryCreated={(cat) =>
+          setCategories((prev) =>
+            [...prev, cat].sort((a, b) => a.name.localeCompare(b.name)),
+          )
+        }
+        submitLabel="Salvar produto"
+        onSubmit={handleCreateProduct}
+        onCancel={() => router.back()}
+      />
     </Screen>
   );
 }

@@ -52,6 +52,7 @@ export interface ProductFormSubmitPayload {
 export interface ProductFormProps {
   workspaceId: string;
   categories: CategoryRow[];
+  isLoadingCategories?: boolean;
   onCategoryCreated: (category: CategoryRow) => void;
   initialValues?: Partial<ProductFormInput>;
   existingImagePath?: string | null;
@@ -63,6 +64,7 @@ export interface ProductFormProps {
 export function ProductForm({
   workspaceId,
   categories,
+  isLoadingCategories = false,
   onCategoryCreated,
   initialValues,
   existingImagePath = null,
@@ -611,6 +613,13 @@ export function ProductForm({
               </Pressable>
             );
           })}
+
+          {isLoadingCategories ? (
+            <View style={styles.categoryLoadingChip}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={styles.categoryLoadingText}>Carregando...</Text>
+            </View>
+          ) : null}
         </ScrollView>
       </View>
 
@@ -1133,6 +1142,22 @@ const styles = StyleSheet.create({
     color: colors.white,
   },
   categoryChipTextUnselected: {
+    color: colors.textSecondary,
+  },
+  categoryLoadingChip: {
+    minHeight: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  categoryLoadingText: {
+    ...typography.caption,
     color: colors.textSecondary,
   },
   marginRow: {

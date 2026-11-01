@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
@@ -51,55 +51,66 @@ export default function ProductDetailScreen() {
   const [confirmArchiveOpen, setConfirmArchiveOpen] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
   const { showToast } = useToast();
+  const hasLoadedRef = useRef(false);
 
-  const loadProduct = useCallback(async () => {
-    if (!workspaceId || !id) {
-      setIsLoading(false);
-      return;
-    }
+  useEffect(() => {
+    hasLoadedRef.current = false;
+  }, [id, workspaceId]);
 
-    setIsLoading(true);
-    setErrorMessage(null);
-    try {
-      const [record, categories, movements] = await Promise.all([
-        getWorkspaceProductById(workspaceId, id),
-        listWorkspaceCategories(workspaceId),
-        listWorkspaceStockMovements({
-          workspaceId,
-          productId: id,
-          filter: 'in',
-          limit: 10,
-        }).catch(() => [] as StockMovementWithProduct[]),
-      ]);
-
-      if (!record) {
-        setErrorMessage('Produto não encontrado neste espaço de trabalho.');
+  const loadProduct = useCallback(
+    async (isSilent = false) => {
+      if (!workspaceId || !id) {
+        setIsLoading(false);
         return;
       }
 
-      setProduct(record);
-      setRecentEntries(
-        movements.filter((m) => m.movement_type === 'entry').slice(0, 5),
-      );
-      const foundCategory = categories.find((c) => c.id === record.category_id);
-      setCategoryName(foundCategory?.name ?? 'Sem categoria');
-
-      if (record.primary_image_path) {
-        const signed = await getSignedProductImageUrl(record.primary_image_path);
-        setSignedImageUrl(signed);
-      } else {
-        setSignedImageUrl(null);
+      if (!isSilent && !hasLoadedRef.current) {
+        setIsLoading(true);
       }
-    } catch (error) {
-      setErrorMessage(mapProductServiceError(error));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [id, workspaceId]);
+      setErrorMessage(null);
+      try {
+        const [record, categories, movements] = await Promise.all([
+          getWorkspaceProductById(workspaceId, id),
+          listWorkspaceCategories(workspaceId),
+          listWorkspaceStockMovements({
+            workspaceId,
+            productId: id,
+            filter: 'in',
+            limit: 10,
+          }).catch(() => [] as StockMovementWithProduct[]),
+        ]);
+
+        if (!record) {
+          setErrorMessage('Produto não encontrado neste espaço de trabalho.');
+          return;
+        }
+
+        setProduct(record);
+        setRecentEntries(
+          movements.filter((m) => m.movement_type === 'entry').slice(0, 5),
+        );
+        const foundCategory = categories.find((c) => c.id === record.category_id);
+        setCategoryName(foundCategory?.name ?? 'Sem categoria');
+
+        if (record.primary_image_path) {
+          const signed = await getSignedProductImageUrl(record.primary_image_path);
+          setSignedImageUrl(signed);
+        } else {
+          setSignedImageUrl(null);
+        }
+        hasLoadedRef.current = true;
+      } catch (error) {
+        setErrorMessage(mapProductServiceError(error));
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [id, workspaceId],
+  );
 
   useFocusEffect(
     useCallback(() => {
-      void loadProduct();
+      void loadProduct(true);
     }, [loadProduct]),
   );
 

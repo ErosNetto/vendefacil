@@ -73,9 +73,10 @@
 - [x] Precificação por remessa na entrada de estoque (custo unitário, novo preço de venda, sugestão de custo médio ponderado e histórico de lotes) + modal de preço unitário negociado no carrinho da Nova Venda (`supabase/migrations/20261031000011_stock_entry_pricing_and_custom_sale_price.sql`, `src/app/inventory/adjust.tsx`, `src/app/inventory/movements.tsx`, `src/app/products/[id]/index.tsx`, `src/app/sales/new.tsx`).
 - [x] Leitor de código de barras via câmera (`expo-camera`, `BarcodeScannerModal`) com preenchimento inteligente de dados em cascata (Catálogo próprio, Open Beauty Facts, Open Products Facts, Open Food Facts e UPCitemdb) no cadastro de produto + adição/seleção rápida na Nova Venda e no Movimentar Estoque (`src/components/ui/BarcodeScannerModal.tsx`, `src/features/products/barcodeLookupService.ts`, `src/features/products/ProductForm.tsx`).
 - [x] Motor global de Toast 60fps nativo estilo Sonner / Dynamic Island (`ToastProvider`, `useToast`, `showGlobalToast` em `src/components/ui/Toast.tsx` e `src/app/_layout.tsx`), substituindo banners estáticos e alertas bloqueantes em todo o app (Vendas, Estoque, Clientes, Produtos, Despesas, Relatórios, Auth e WhatsApp).
+- [x] Otimização de UI/UX em fluxos de carregamento: abertura a 0ms de novos formulários (Produtos e Despesas) com chips inline assíncronos e eliminação de telas de loading bloqueantes após ações de botão (confirmação/cancelamento de venda, baixa de parcelas e revalidação de detalhes in-place com `hasLoadedRef`).
 
 ## Fase 9 — APK
-- [x] Testes RLS e fluxos ponta a ponta (`supabase/tests/phase9_final_rls_and_pricing_test.sql` + 74 testes automatizados com Vitest).
+- [x] Testes RLS e fluxos ponta a ponta (`supabase/tests/phase9_final_rls_and_pricing_test.sql` + 79 testes automatizados com Vitest).
 - [x] Acessibilidade/performance (`touchTarget`, `accessibilityRole`, paginação, debounce e memoização).
 - [x] Ícone/splash/configuração Android (`assets/icon.png`, `assets/adaptive-icon.png`, `assets/splash-icon.png`, `app.json` e `eas.json`).
 - [x] EAS Build APK de preview (`@erosnettoantunes/vendefacil`, `projectId: 5f7bf571-cebd-4e03-ac55-992321179d74`).

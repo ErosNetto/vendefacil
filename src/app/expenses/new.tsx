@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState, type ComponentRef } from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -14,13 +15,12 @@ import {
   DatePickerField,
   FilterChips,
   FormField,
-  LoadingState,
   PrimaryButton,
   Screen,
   useScrollToTop,
   useToast,
 } from '@/components/ui';
-import { colors, spacing, typography } from '@/constants/theme';
+import { colors, radius, spacing, typography } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
 import {
   expenseFormSchema,
@@ -233,7 +233,12 @@ export default function NewExpenseScreen() {
           <View style={styles.sectionBlock}>
             <Text style={styles.sectionLabel}>Categoria</Text>
             {isLoadingCategories ? (
-              <LoadingState message="Carregando categorias..." />
+              <View style={styles.inlineCategoryLoading}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={styles.inlineCategoryLoadingText}>
+                  Carregando categorias...
+                </Text>
+              </View>
             ) : (
               <FilterChips
                 options={categoryChips}
@@ -291,6 +296,23 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.text,
     fontWeight: '700',
+  },
+  inlineCategoryLoading: {
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    backgroundColor: colors.surface,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignSelf: 'flex-start',
+  },
+  inlineCategoryLoadingText: {
+    ...typography.caption,
+    color: colors.textSecondary,
   },
   submitWrap: {
     marginTop: spacing.md,
