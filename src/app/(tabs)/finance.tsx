@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -28,7 +28,6 @@ import {
 } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import { useSession } from '@/features/auth/SessionProvider';
-import { listWorkspaceCustomers } from '@/features/customers/services';
 import { FinanceSettingsCard } from '@/features/finance/FinanceSettingsCard';
 import { ReceivePaymentModal } from '@/features/finance/ReceivePaymentModal';
 import {
@@ -40,6 +39,7 @@ import {
   type WorkspaceFinanceSettings,
 } from '@/features/finance/schemas';
 import {
+  fetchInstallmentsLookupMetadata,
   getWorkspaceReceivablesOverview,
   type ReceivableFilterKey,
 } from '@/features/finance/services';
@@ -53,12 +53,10 @@ import {
   useWorkspacePixSettings,
 } from '@/features/whatsapp/services';
 import { useDebounce } from '@/hooks';
-import { supabase } from '@/lib/supabase';
 import type {
   InstallmentRow,
   PaymentMethod,
   PaymentRow,
-  SaleRow,
 } from '@/types/database';
 import { formatCentsToBRL, formatDateBR } from '@/utils/formatters';
 
@@ -317,6 +315,11 @@ export default function FinanceTabScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedInstallment, setSelectedInstallment] =
     useState<InstallmentRow | null>(null);
+  const hasLoadedRef = useRef(false);
+
+  useEffect(() => {
+    hasLoadedRef.current = false;
+  }, [workspaceId]);
 
   const loadFinanceData = useCallback(async (isPullRefresh: boolean = false) => {
     if (!workspaceId) {
@@ -329,43 +332,23 @@ export default function FinanceTabScreen() {
 
     if (isPullRefresh) {
       setIsRefreshing(true);
-    } else {
+    } else if (!hasLoadedRef.current) {
       setIsLoading(true);
     }
     setErrorMessage(null);
 
     try {
-      const [overview, customers, salesRes] = await Promise.all([
-        getWorkspaceReceivablesOverview(workspaceId),
-        listWorkspaceCustomers(workspaceId).catch(() => []),
-        supabase
-          .from('sales')
-          .select('id, payment_method')
-          .eq('workspace_id', workspaceId),
-      ]);
+      const overview = await getWorkspaceReceivablesOverview(workspaceId);
+      const metadata = await fetchInstallmentsLookupMetadata(
+        workspaceId,
+        overview.installments,
+      );
+
+      hasLoadedRef.current = true;
       setInstallments(overview.installments);
       setRecentPayments(overview.recentPayments);
-
-      const phoneMap: Record<string, string> = {};
-      for (const cust of customers) {
-        if (cust.phone) {
-          phoneMap[cust.id] = cust.phone;
-        }
-      }
-      setCustomerPhones(phoneMap);
-
-      const methodMap: Record<string, PaymentMethod> = {};
-      if (salesRes.data) {
-        for (const s of salesRes.data as Pick<
-          SaleRow,
-          'id' | 'payment_method'
-        >[]) {
-          if (s.payment_method) {
-            methodMap[s.id] = s.payment_method;
-          }
-        }
-      }
-      setSalePaymentMethods(methodMap);
+      setCustomerPhones(metadata.customerPhonesRecord);
+      setSalePaymentMethods(metadata.salePaymentMethodsRecord);
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -801,6 +784,11 @@ export default function FinanceTabScreen() {
   const { scrollRef, showScrollToTop, handleScroll, scrollToTop } =
     useScrollToTop<FlatList<(typeof displayedInstallments)[number]>>();
 
+  const renderSeparator = useCallback(
+    () => <View style={styles.cardSeparator} />,
+    [],
+  );
+
   return (
     <Screen
       scroll={false}
@@ -830,7 +818,7 @@ export default function FinanceTabScreen() {
           keyExtractor={keyExtractor}
           ListHeaderComponent={listHeader}
           renderItem={renderItem}
-          ItemSeparatorComponent={() => <View style={styles.cardSeparator} />}
+          ItemSeparatorComponent={renderSeparator}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <EmptyState

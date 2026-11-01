@@ -1,5 +1,6 @@
 import {
   BARCODE_LOOKUP_PROVIDERS,
+  type BarcodeProviderConfig,
   extractProductMetadataFromOpenFacts,
   type OpenFactsProductPayload,
   sanitizeBarcodeDigits,
@@ -25,12 +26,30 @@ export interface LookupBarcodeOptions {
   timeoutMs?: number;
 }
 
+const EXTERNAL_BARCODE_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutos
+const externalBarcodeCache = new Map<
+  string,
+  { result: BarcodeLookupResult; expiresAt: number }
+>();
+
 async function fetchWithTimeout(
   url: string,
   timeoutMs: number,
+  parentSignal?: AbortSignal,
 ): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  const onParentAbort = () => controller.abort();
+  if (parentSignal) {
+    if (parentSignal.aborted) {
+      clearTimeout(timer);
+      controller.abort();
+    } else {
+      parentSignal.addEventListener('abort', onParentAbort, { once: true });
+    }
+  }
+
   try {
     return await fetch(url, {
       method: 'GET',
@@ -42,6 +61,9 @@ async function fetchWithTimeout(
     });
   } finally {
     clearTimeout(timer);
+    if (parentSignal) {
+      parentSignal.removeEventListener('abort', onParentAbort);
+    }
   }
 }
 
@@ -124,6 +146,68 @@ function extractProductMetadataFromUpcItemDb(
   };
 }
 
+const OPEN_FACTS_FIELDS_PARAM =
+  'fields=product_name,product_name_pt,generic_name,generic_name_pt,brands,quantity,categories,packaging';
+
+async function queryExternalProvider(
+  provider: BarcodeProviderConfig,
+  barcode: string,
+  timeoutMs: number,
+  signal: AbortSignal,
+): Promise<BarcodeLookupResult | null> {
+  try {
+    if (provider.id === 'upcitemdb') {
+      const url = `${provider.baseUrl}?upc=${encodeURIComponent(barcode)}`;
+      const response = await fetchWithTimeout(url, timeoutMs, signal);
+      if (!response.ok) {
+        return null;
+      }
+      const json = (await response.json()) as UpcItemDbPayload;
+      const extracted = extractProductMetadataFromUpcItemDb(json);
+      if (!extracted) {
+        return null;
+      }
+      return {
+        barcode,
+        found: true,
+        source: 'external',
+        providerLabel: provider.label,
+        existingWorkspaceProduct: null,
+        name: extracted.name,
+        brand: extracted.brand,
+        description: extracted.description,
+        SuggestedCategoryTerms: extracted.categoryTerms,
+      };
+    }
+
+    const url = `${provider.baseUrl}/${encodeURIComponent(barcode)}.json?${OPEN_FACTS_FIELDS_PARAM}`;
+    const response = await fetchWithTimeout(url, timeoutMs, signal);
+    if (!response.ok) {
+      return null;
+    }
+
+    const json = (await response.json()) as OpenFactsProductPayload;
+    const extracted = extractProductMetadataFromOpenFacts(json);
+    if (!extracted) {
+      return null;
+    }
+
+    return {
+      barcode,
+      found: true,
+      source: 'external',
+      providerLabel: provider.label,
+      existingWorkspaceProduct: null,
+      name: extracted.name,
+      brand: extracted.brand,
+      description: extracted.description,
+      SuggestedCategoryTerms: extracted.categoryTerms,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function lookupProductByBarcode(
   rawBarcode: string,
   options?: LookupBarcodeOptions,
@@ -168,65 +252,44 @@ export async function lookupProductByBarcode(
     }
   }
 
-  // 2. Consulta bases públicas habilitadas em cascata
-  const timeoutMs = options?.timeoutMs ?? 4500;
+  // 2. Verifica cache em memória de buscas externas recentes
+  const cachedExternal = externalBarcodeCache.get(barcode);
+  const now = Date.now();
+  if (cachedExternal && cachedExternal.expiresAt > now) {
+    return cachedExternal.result;
+  }
+
+  // 3. Dispara consultas nas bases públicas habilitadas em paralelo,
+  // mantendo a ordem de prioridade (Beauty -> Food -> Products -> UPCitemdb)
+  const timeoutMs = options?.timeoutMs ?? 4000;
   const activeProviders = BARCODE_LOOKUP_PROVIDERS.filter(
     (provider) => provider.enabledByDefault,
   );
 
-  const fieldsParam =
-    'fields=product_name,product_name_pt,generic_name,generic_name_pt,brands,quantity,categories,packaging';
+  const batchAbortController = new AbortController();
+  try {
+    const parallelQueries = activeProviders.map((provider) =>
+      queryExternalProvider(
+        provider,
+        barcode,
+        timeoutMs,
+        batchAbortController.signal,
+      ),
+    );
 
-  for (const provider of activeProviders) {
-    try {
-      if (provider.id === 'upcitemdb') {
-        const url = `${provider.baseUrl}?upc=${encodeURIComponent(barcode)}`;
-        const response = await fetchWithTimeout(url, timeoutMs);
-        if (!response.ok) {
-          continue;
-        }
-        const json = (await response.json()) as UpcItemDbPayload;
-        const extracted = extractProductMetadataFromUpcItemDb(json);
-        if (extracted) {
-          return {
-            barcode,
-            found: true,
-            source: 'external',
-            providerLabel: provider.label,
-            existingWorkspaceProduct: null,
-            name: extracted.name,
-            brand: extracted.brand,
-            description: extracted.description,
-            SuggestedCategoryTerms: extracted.categoryTerms,
-          };
-        }
-        continue;
+    for (const queryPromise of parallelQueries) {
+      const hit = await queryPromise;
+      if (hit) {
+        batchAbortController.abort();
+        externalBarcodeCache.set(barcode, {
+          result: hit,
+          expiresAt: Date.now() + EXTERNAL_BARCODE_CACHE_TTL_MS,
+        });
+        return hit;
       }
-
-      const url = `${provider.baseUrl}/${encodeURIComponent(barcode)}.json?${fieldsParam}`;
-      const response = await fetchWithTimeout(url, timeoutMs);
-      if (!response.ok) {
-        continue;
-      }
-
-      const json = (await response.json()) as OpenFactsProductPayload;
-      const extracted = extractProductMetadataFromOpenFacts(json);
-      if (extracted) {
-        return {
-          barcode,
-          found: true,
-          source: 'external',
-          providerLabel: provider.label,
-          existingWorkspaceProduct: null,
-          name: extracted.name,
-          brand: extracted.brand,
-          description: extracted.description,
-          SuggestedCategoryTerms: extracted.categoryTerms,
-        };
-      }
-    } catch {
-      // Ignora timeout ou erro de rede de um provedor específico e tenta o próximo
     }
+  } finally {
+    batchAbortController.abort();
   }
 
   return {

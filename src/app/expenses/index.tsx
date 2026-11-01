@@ -321,6 +321,10 @@ export default function ExpensesListScreen() {
 
   const { scrollRef, showScrollToTop, handleScroll, scrollToTop } =
     useScrollToTop<FlatList<(typeof expenses)[number]>>();
+  const renderSeparator = useCallback(
+    () => <View style={styles.separator} />,
+    [],
+  );
 
   return (
     <Screen
@@ -385,7 +389,7 @@ export default function ExpensesListScreen() {
           keyExtractor={keyExtractor}
           ListHeaderComponent={listHeader}
           renderItem={renderItem}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ItemSeparatorComponent={renderSeparator}
           ListFooterComponent={
             <ListFooterLoader
               isLoadingMore={isLoadingMore}

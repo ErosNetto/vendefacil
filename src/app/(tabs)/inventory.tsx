@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Platform, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
 import {
@@ -187,6 +187,11 @@ export default function InventoryTabScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const hasLoadedRef = useRef(false);
+
+  useEffect(() => {
+    hasLoadedRef.current = false;
+  }, [workspaceId]);
 
   const loadInventory = useCallback(async (isPullRefresh: boolean = false) => {
     if (!workspaceId) {
@@ -197,12 +202,13 @@ export default function InventoryTabScreen() {
 
     if (isPullRefresh) {
       setIsRefreshing(true);
-    } else {
+    } else if (!hasLoadedRef.current) {
       setIsLoading(true);
     }
     setErrorMessage(null);
     try {
       const allProducts = await listWorkspaceProducts(workspaceId);
+      hasLoadedRef.current = true;
       setProducts(allProducts.filter((item) => !item.is_archived));
     } catch (error) {
       setErrorMessage(mapProductServiceError(error));
@@ -449,6 +455,10 @@ export default function InventoryTabScreen() {
     useScrollToTop<FlatList<ProductRow>>();
 
   const keyExtractor = useCallback((item: ProductRow) => item.id, []);
+  const renderSeparator = useCallback(
+    () => <View style={styles.cardSeparator} />,
+    [],
+  );
 
   return (
     <Screen
@@ -502,7 +512,7 @@ export default function InventoryTabScreen() {
           keyExtractor={keyExtractor}
           ListHeaderComponent={listHeader}
           renderItem={renderItem}
-          ItemSeparatorComponent={() => <View style={styles.cardSeparator} />}
+          ItemSeparatorComponent={renderSeparator}
           ListEmptyComponent={
             <EmptyState
               iconName="checkmark-circle-outline"

@@ -310,6 +310,10 @@ export default function SalesTabScreen() {
 
   const { scrollRef, showScrollToTop, handleScroll, scrollToTop } =
     useScrollToTop<FlatList<SaleRow>>();
+  const renderSeparator = useCallback(
+    () => <View style={styles.cardSeparator} />,
+    [],
+  );
 
   const keyExtractor = useCallback((item: SaleRow) => item.id, []);
 
@@ -387,7 +391,7 @@ export default function SalesTabScreen() {
           keyExtractor={keyExtractor}
           ListHeaderComponent={listHeader}
           renderItem={renderItem}
-          ItemSeparatorComponent={() => <View style={styles.cardSeparator} />}
+          ItemSeparatorComponent={renderSeparator}
           ListFooterComponent={
             <ListFooterLoader
               isLoadingMore={isLoadingMore}

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
   Platform,
@@ -40,6 +40,7 @@ import {
   getWorkspaceFinanceSettings,
   type WorkspaceFinanceSettings,
 } from '@/features/finance/schemas';
+import { fetchInstallmentsLookupMetadata } from '@/features/finance/services';
 import {
   buildSmartInstallmentWhatsAppMessage,
   shouldShowInstallmentWhatsAppCharge,
@@ -48,12 +49,9 @@ import {
   openWhatsAppWithMessage,
   useWorkspacePixSettings,
 } from '@/features/whatsapp/services';
-import { supabase } from '@/lib/supabase';
 import type {
-  CustomerRow,
   InstallmentRow,
   PaymentMethod,
-  SaleRow,
 } from '@/types/database';
 import { formatCentsToBRL, formatDateBR } from '@/utils/formatters';
 
@@ -202,6 +200,11 @@ export default function CalendarTabScreen() {
 
   const [selectedInstallment, setSelectedInstallment] =
     useState<InstallmentRow | null>(null);
+  const hasLoadedRef = useRef(false);
+
+  useEffect(() => {
+    hasLoadedRef.current = false;
+  }, [workspaceId]);
 
   const todayISO = useMemo(() => getTodayISODate(), []);
   const financeSettings = useMemo(
@@ -221,48 +224,22 @@ export default function CalendarTabScreen() {
 
       if (isPullRefresh) {
         setIsRefreshing(true);
-      } else {
+      } else if (!hasLoadedRef.current) {
         setIsLoading(true);
       }
       setErrorMessage(null);
 
       try {
-        const [instList, customersRes, salesRes] = await Promise.all([
-          fetchCalendarInstallments(workspaceId),
-          supabase
-            .from('customers')
-            .select('id, phone')
-            .eq('workspace_id', workspaceId),
-          supabase
-            .from('sales')
-            .select('id, payment_method')
-            .eq('workspace_id', workspaceId),
-        ]);
+        const instList = await fetchCalendarInstallments(workspaceId);
+        const metadata = await fetchInstallmentsLookupMetadata(
+          workspaceId,
+          instList,
+        );
 
+        hasLoadedRef.current = true;
         setInstallments(instList);
-
-        const phoneMap = new Map<string, string>();
-        if (customersRes.data) {
-          for (const c of customersRes.data as Pick<CustomerRow, 'id' | 'phone'>[]) {
-            if (c.phone) {
-              phoneMap.set(c.id, c.phone);
-            }
-          }
-        }
-        setCustomerPhoneMap(phoneMap);
-
-        const methodMap = new Map<string, PaymentMethod>();
-        if (salesRes.data) {
-          for (const s of salesRes.data as Pick<
-            SaleRow,
-            'id' | 'payment_method'
-          >[]) {
-            if (s.payment_method) {
-              methodMap.set(s.id, s.payment_method);
-            }
-          }
-        }
-        setSalePaymentMethodMap(methodMap);
+        setCustomerPhoneMap(metadata.customerPhoneMap);
+        setSalePaymentMethodMap(metadata.salePaymentMethodMap);
       } catch (error) {
         setErrorMessage(
           error instanceof Error
@@ -438,6 +415,11 @@ export default function CalendarTabScreen() {
   const { scrollRef, showScrollToTop, handleScroll, scrollToTop } =
     useScrollToTop<FlatList<(typeof displayedInstallments)[number]>>();
 
+  const renderSeparator = useCallback(
+    () => <View style={styles.separator} />,
+    [],
+  );
+
   return (
     <Screen
       scroll={false}
@@ -468,7 +450,7 @@ export default function CalendarTabScreen() {
           keyExtractor={keyExtractor}
           ListHeaderComponent={listHeader}
           renderItem={renderItem}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ItemSeparatorComponent={renderSeparator}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <EmptyState

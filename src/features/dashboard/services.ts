@@ -23,12 +23,14 @@ export async function fetchDashboardRawData(
       .from('payments')
       .select('*')
       .eq('workspace_id', workspaceId)
+      .eq('is_reversed', false)
       .order('paid_at', { ascending: false }),
     supabase
       .from('installments')
       .select('*')
       .eq('workspace_id', workspaceId)
       .neq('status', 'cancelled')
+      .neq('status', 'paid')
       .order('due_date', { ascending: true }),
     supabase
       .from('products')

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState, type ComponentRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import {
   Pressable,
   RefreshControl,
@@ -57,6 +57,11 @@ export default function DashboardScreen() {
 
   const [selectedInstallment, setSelectedInstallment] =
     useState<InstallmentRow | null>(null);
+  const hasLoadedRef = useRef(false);
+
+  useEffect(() => {
+    hasLoadedRef.current = false;
+  }, [workspaceId]);
 
   const todayISO = useMemo(() => getTodayISODate(), []);
   const financeSettings = useMemo(
@@ -81,13 +86,14 @@ export default function DashboardScreen() {
 
       if (isPullRefresh) {
         setIsRefreshing(true);
-      } else if (!data) {
+      } else if (!hasLoadedRef.current) {
         setIsLoading(true);
       }
       setErrorMessage(null);
 
       try {
         const raw = await fetchDashboardRawData(workspaceId);
+        hasLoadedRef.current = true;
         setData(raw);
       } catch (error) {
         setErrorMessage(
@@ -100,7 +106,7 @@ export default function DashboardScreen() {
         setIsRefreshing(false);
       }
     },
-    [workspaceId, data],
+    [workspaceId],
   );
 
   useFocusEffect(

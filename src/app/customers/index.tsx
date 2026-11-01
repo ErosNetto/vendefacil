@@ -121,6 +121,10 @@ export default function CustomersListScreen() {
     useScrollToTop<FlatList<CustomerRecord>>();
 
   const keyExtractor = useCallback((item: CustomerRecord) => item.id, []);
+  const renderSeparator = useCallback(
+    () => <View style={styles.separator} />,
+    [],
+  );
 
   const renderItem = useCallback(
     ({ item }: { item: CustomerRecord }) => (
@@ -214,7 +218,7 @@ export default function CustomersListScreen() {
           data={customers}
           keyExtractor={keyExtractor}
           renderItem={renderItem}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ItemSeparatorComponent={renderSeparator}
           ListHeaderComponent={
             <ListCounterBanner
               totalCount={totalCount}

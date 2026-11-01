@@ -28,6 +28,7 @@ interface SignedUrlCacheEntry {
 }
 
 const signedUrlCache = new Map<string, SignedUrlCacheEntry>();
+const inFlightSignedUrlRequests = new Map<string, Promise<string | null>>();
 
 /**
  * Abre a câmera ou galeria do aparelho, redimensiona para no máximo 1080px,
@@ -242,7 +243,7 @@ export async function removeProductPrimaryImage(
 
 /**
  * Gera uma URL assinada temporária para exibir uma foto privada do bucket
- * `product-images`, utilizando cache em memória até perto da expiração.
+ * `product-images`, utilizando cache em memória e deduplicação de chamadas concorrentes.
  */
 export async function getSignedProductImageUrl(
   storagePath: string | null | undefined,
@@ -257,18 +258,88 @@ export async function getSignedProductImageUrl(
     return cached.url;
   }
 
-  const { data, error } = await supabase.storage
-    .from(PRODUCT_IMAGES_BUCKET)
-    .createSignedUrl(storagePath, SIGNED_URL_TTL_SECONDS);
-
-  if (error || !data?.signedUrl) {
-    return null;
+  const existingInFlight = inFlightSignedUrlRequests.get(storagePath);
+  if (existingInFlight) {
+    return existingInFlight;
   }
 
-  signedUrlCache.set(storagePath, {
-    url: data.signedUrl,
-    expiresAt: now + CACHE_EXPIRY_MS,
-  });
+  const requestPromise = (async () => {
+    try {
+      const { data, error } = await supabase.storage
+        .from(PRODUCT_IMAGES_BUCKET)
+        .createSignedUrl(storagePath, SIGNED_URL_TTL_SECONDS);
 
-  return data.signedUrl;
+      if (error || !data?.signedUrl) {
+        return null;
+      }
+
+      signedUrlCache.set(storagePath, {
+        url: data.signedUrl,
+        expiresAt: Date.now() + CACHE_EXPIRY_MS,
+      });
+
+      return data.signedUrl;
+    } catch {
+      return null;
+    } finally {
+      inFlightSignedUrlRequests.delete(storagePath);
+    }
+  })();
+
+  inFlightSignedUrlRequests.set(storagePath, requestPromise);
+  return requestPromise;
+}
+
+/**
+ * Pré-carrega em lote (1 única requisição HTTP ao Supabase Storage) as URLs
+ * assinadas de múltiplos produtos para evitar efeito cascata nas listas.
+ */
+export async function prefetchSignedProductImageUrls(
+  storagePaths: (string | null | undefined)[],
+): Promise<void> {
+  if (!supabaseEnvStatus.isConfigured) {
+    return;
+  }
+
+  const now = Date.now();
+  const uniqueMissingPaths = Array.from(
+    new Set(
+      storagePaths.filter((p): p is string => {
+        if (!p) {
+          return false;
+        }
+        const cached = signedUrlCache.get(p);
+        if (cached && cached.expiresAt > now) {
+          return false;
+        }
+        return !inFlightSignedUrlRequests.has(p);
+      }),
+    ),
+  );
+
+  if (uniqueMissingPaths.length === 0) {
+    return;
+  }
+
+  try {
+    const { data, error } = await supabase.storage
+      .from(PRODUCT_IMAGES_BUCKET)
+      .createSignedUrls(uniqueMissingPaths, SIGNED_URL_TTL_SECONDS);
+
+    if (error || !data) {
+      return;
+    }
+
+    const expiresAt = Date.now() + CACHE_EXPIRY_MS;
+    for (const entry of data) {
+      if (entry.path && entry.signedUrl && !entry.error) {
+        signedUrlCache.set(entry.path, {
+          url: entry.signedUrl,
+          expiresAt,
+        });
+      }
+    }
+  } catch {
+    // Falha silenciosa no prefetch: o fallback individual em getSignedProductImageUrl continua ativo
+  }
 }

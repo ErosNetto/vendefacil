@@ -1,3 +1,4 @@
+import { prefetchSignedProductImageUrls } from '@/features/products/imageService';
 import {
   categoryFormSchema,
   productFormSchema,
@@ -102,7 +103,9 @@ export async function listWorkspaceProducts(
     throw error;
   }
 
-  return data ?? [];
+  const items = data ?? [];
+  void prefetchSignedProductImageUrls(items.map((p) => p.primary_image_path));
+  return items;
 }
 
 export interface ListWorkspaceProductsPaginatedOptions {
@@ -164,9 +167,12 @@ export async function listWorkspaceProductsPaginated({
     throw error;
   }
 
+  const items = data ?? [];
+  void prefetchSignedProductImageUrls(items.map((p) => p.primary_image_path));
+
   return {
-    items: data ?? [],
-    totalCount: count ?? (data?.length ?? 0),
+    items,
+    totalCount: count ?? items.length,
   };
 }
 

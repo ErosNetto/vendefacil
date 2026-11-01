@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useState, type ComponentRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import {
   Alert,
   Pressable,
@@ -113,6 +113,11 @@ export default function FinancialReportsScreen() {
     expenses: ExpenseRow[];
     categories: ExpenseCategoryRow[];
   } | null>(null);
+  const hasLoadedRef = useRef(false);
+
+  useEffect(() => {
+    hasLoadedRef.current = false;
+  }, [workspaceId]);
 
   const activeRange = useMemo(() => getReportDateRange(period), [period]);
 
@@ -122,7 +127,7 @@ export default function FinancialReportsScreen() {
 
       if (isPullRefresh) {
         setIsRefreshing(true);
-      } else {
+      } else if (!hasLoadedRef.current) {
         setIsLoading(true);
       }
       setErrorMessage(null);
@@ -133,6 +138,7 @@ export default function FinancialReportsScreen() {
           startDateISO: activeRange.startDateISO,
           endDateISO: activeRange.endDateISO,
         });
+        hasLoadedRef.current = true;
         setData(res);
       } catch (error) {
         setErrorMessage(

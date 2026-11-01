@@ -149,6 +149,10 @@ export default function ProductsCatalogScreen() {
     useScrollToTop<FlatList<ProductRow>>();
 
   const keyExtractor = useCallback((item: ProductRow) => item.id, []);
+  const renderSeparator = useCallback(
+    () => <View style={styles.separator} />,
+    [],
+  );
 
   const renderItem = useCallback(
     ({ item }: { item: ProductRow }) => (
@@ -259,7 +263,7 @@ export default function ProductsCatalogScreen() {
           updateCellsBatchingPeriod={50}
           removeClippedSubviews={Platform.OS === 'android'}
           renderItem={renderItem}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ItemSeparatorComponent={renderSeparator}
           ListHeaderComponent={
             <ListCounterBanner
               totalCount={totalCount}

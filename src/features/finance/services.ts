@@ -312,6 +312,93 @@ export async function updateWorkspaceFinanceSettings(
   return data as UpdateWorkspaceFinanceSettingsRpcResult;
 }
 
+export interface InstallmentsLookupMetadata {
+  customerPhoneMap: Map<string, string>;
+  salePaymentMethodMap: Map<string, PaymentMethod>;
+  customerPhonesRecord: Record<string, string>;
+  salePaymentMethodsRecord: Record<string, PaymentMethod>;
+}
+
+/**
+ * Busca apenas os telefones dos clientes e as formas de pagamento das vendas
+ * que estão efetivamente presentes na lista de parcelas informada,
+ * evitando baixar todas as vendas e clientes históricos da loja.
+ */
+export async function fetchInstallmentsLookupMetadata(
+  workspaceId: string,
+  installments: InstallmentRow[],
+): Promise<InstallmentsLookupMetadata> {
+  const customerPhoneMap = new Map<string, string>();
+  const salePaymentMethodMap = new Map<string, PaymentMethod>();
+  const customerPhonesRecord: Record<string, string> = {};
+  const salePaymentMethodsRecord: Record<string, PaymentMethod> = {};
+
+  if (!supabaseEnvStatus.isConfigured || installments.length === 0) {
+    return {
+      customerPhoneMap,
+      salePaymentMethodMap,
+      customerPhonesRecord,
+      salePaymentMethodsRecord,
+    };
+  }
+
+  const uniqueCustomerIds = Array.from(
+    new Set(
+      installments
+        .map((i) => i.customer_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  );
+
+  const uniqueSaleIds = Array.from(
+    new Set(
+      installments
+        .map((i) => i.sale_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  );
+
+  const [customersRes, salesRes] = await Promise.all([
+    uniqueCustomerIds.length > 0
+      ? supabase
+          .from('customers')
+          .select('id, phone')
+          .eq('workspace_id', workspaceId)
+          .in('id', uniqueCustomerIds)
+      : Promise.resolve({ data: [] as { id: string; phone: string | null }[] }),
+    uniqueSaleIds.length > 0
+      ? supabase
+          .from('sales')
+          .select('id, payment_method')
+          .eq('workspace_id', workspaceId)
+          .in('id', uniqueSaleIds)
+      : Promise.resolve({
+          data: [] as { id: string; payment_method: PaymentMethod | null }[],
+        }),
+  ]);
+
+  for (const c of customersRes.data ?? []) {
+    if (c.phone) {
+      customerPhoneMap.set(c.id, c.phone);
+      customerPhonesRecord[c.id] = c.phone;
+    }
+  }
+
+  for (const s of salesRes.data ?? []) {
+    if (s.payment_method) {
+      salePaymentMethodMap.set(s.id, s.payment_method);
+      salePaymentMethodsRecord[s.id] = s.payment_method;
+    }
+  }
+
+  return {
+    customerPhoneMap,
+    salePaymentMethodMap,
+    customerPhonesRecord,
+    salePaymentMethodsRecord,
+  };
+}
+
 export function mapFinanceServiceError(error: unknown): string {
   if (!(error instanceof Error)) {
     return 'Ocorreu um erro inesperado na operação financeira.';
