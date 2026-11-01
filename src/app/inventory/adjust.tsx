@@ -12,10 +12,9 @@ import {
   FormField,
   LoadingState,
   PrimaryButton,
+  ProductPickerModal,
   Screen,
-  SearchField,
   SecondaryButton,
-  StatusBadge,
   ToastOverlay,
   useToast,
 } from '@/components/ui';
@@ -67,10 +66,7 @@ export default function InventoryAdjustScreen() {
   const [selectedProductImageUrl, setSelectedProductImageUrl] = useState<
     string | null
   >(null);
-  const [productSearch, setProductSearch] = useState('');
-  const [isSelectingProduct, setIsSelectingProduct] = useState(
-    !params.productId,
-  );
+  const [productPickerOpen, setProductPickerOpen] = useState(false);
   const [scannerModalOpen, setScannerModalOpen] = useState(false);
   const { toast, showToast, hideToast } = useToast();
 
@@ -123,7 +119,6 @@ export default function InventoryAdjustScreen() {
         const found = list.find((p) => p.id === params.productId);
         if (found) {
           setSelectedProductId(found.id);
-          setIsSelectingProduct(false);
         }
       }
     } catch (error) {
@@ -191,22 +186,6 @@ export default function InventoryAdjustScreen() {
     };
   }, [selectedProduct?.primary_image_path]);
 
-  const filteredProducts = useMemo(() => {
-    const query = productSearch.trim().toLowerCase();
-    if (!query) {
-      return products.slice(0, 15);
-    }
-    return products
-      .filter(
-        (p) =>
-          p.name.toLowerCase().includes(query) ||
-          (p.sku && p.sku.toLowerCase().includes(query)) ||
-          (p.barcode && p.barcode.toLowerCase().includes(query)) ||
-          (p.brand && p.brand.toLowerCase().includes(query)),
-      )
-      .slice(0, 15);
-  }, [productSearch, products]);
-
   function handleBarcodeScannedInAdjust(rawCode: string): void {
     setScannerModalOpen(false);
     const cleaned = rawCode.trim();
@@ -230,7 +209,7 @@ export default function InventoryAdjustScreen() {
     }
 
     setSelectedProductId(found.id);
-    setIsSelectingProduct(false);
+    setProductPickerOpen(false);
     setFieldErrors((prev) => ({ ...prev, productId: undefined }));
     showToast({
       tone: 'success',
@@ -445,7 +424,7 @@ export default function InventoryAdjustScreen() {
             />
           </Pressable>
 
-        {selectedProduct && !isSelectingProduct ? (
+        {selectedProduct ? (
           <View style={styles.selectedProductBox}>
             <View style={styles.selectedProductThumb}>
               {selectedProductImageUrl ? (
@@ -478,61 +457,35 @@ export default function InventoryAdjustScreen() {
             </View>
             <Pressable
               accessibilityRole="button"
-              onPress={() => setIsSelectingProduct(true)}
+              onPress={() => setProductPickerOpen(true)}
               style={styles.changeProductButton}
             >
               <Text style={styles.changeProductText}>Trocar</Text>
             </Pressable>
           </View>
         ) : (
-          <View style={styles.selectorContainer}>
-            <SearchField
-              value={productSearch}
-              onChangeText={setProductSearch}
-              placeholder="Buscar produto por nome ou SKU..."
+          <View style={styles.emptyProductBox}>
+            <Ionicons
+              name="pricetag-outline"
+              size={28}
+              color={colors.primary}
             />
-            <View style={styles.productList}>
-              {filteredProducts.map((item) => {
-                const isSelected = item.id === selectedProductId;
-                return (
-                  <Pressable
-                    key={item.id}
-                    accessibilityRole="button"
-                    onPress={() => {
-                      setSelectedProductId(item.id);
-                      setIsSelectingProduct(false);
-                      setFieldErrors((prev) => ({
-                        ...prev,
-                        productId: undefined,
-                      }));
-                    }}
-                    style={[
-                      styles.productOption,
-                      isSelected ? styles.productOptionSelected : null,
-                    ]}
-                  >
-                    <View style={styles.productOptionMain}>
-                      <Text style={styles.productOptionName} numberOfLines={1}>
-                        {item.name}
-                      </Text>
-                      {item.sku ? (
-                        <Text style={styles.productOptionSku}>
-                          SKU: {item.sku}
-                        </Text>
-                      ) : null}
-                    </View>
-                    <StatusBadge
-                      label={`${Number(item.current_stock_qty ?? 0)} un.`}
-                      tone={
-                        Number(item.current_stock_qty ?? 0) <= 0
-                          ? 'error'
-                          : 'neutral'
-                      }
-                    />
-                  </Pressable>
-                );
-              })}
-            </View>
+            <Text style={styles.emptyProductTitle}>
+              Nenhum produto selecionado
+            </Text>
+            <Text style={styles.emptyProductSub}>
+              Escolha um item do catálogo ou bipe o código de barras acima.
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setProductPickerOpen(true)}
+              style={styles.selectProductPillBtn}
+            >
+              <Ionicons name="search" size={15} color={colors.white} />
+              <Text style={styles.selectProductPillBtnText}>
+                Selecionar produto do catálogo
+              </Text>
+            </Pressable>
           </View>
         )}
 
@@ -851,6 +804,22 @@ export default function InventoryAdjustScreen() {
         onScanned={handleBarcodeScannedInAdjust}
         onClose={() => setScannerModalOpen(false)}
       />
+
+      <ProductPickerModal
+        visible={productPickerOpen}
+        onClose={() => setProductPickerOpen(false)}
+        products={products}
+        mode="single"
+        selectedProductId={selectedProductId}
+        onSelectProduct={(product) => {
+          setSelectedProductId(product.id);
+          setFieldErrors((prev) => ({
+            ...prev,
+            productId: undefined,
+          }));
+        }}
+        onOpenScanner={() => setScannerModalOpen(true)}
+      />
       </Screen>
       <ToastOverlay toast={toast} onDismiss={hideToast} />
     </>
@@ -1088,38 +1057,40 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.primaryDark,
   },
-  selectorContainer: {
-    gap: spacing.xs,
-  },
-  productList: {
-    gap: spacing.xs,
-  },
-  productOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: spacing.md,
+  emptyProductBox: {
+    backgroundColor: colors.background,
     borderRadius: radius.control,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.background,
-    gap: spacing.sm,
+    padding: spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
   },
-  productOptionSelected: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primarySoft,
-  },
-  productOptionMain: {
-    flex: 1,
-    gap: 2,
-  },
-  productOptionName: {
+  emptyProductTitle: {
     ...typography.bodyStrong,
     color: colors.text,
+    marginTop: spacing.xs,
   },
-  productOptionSku: {
+  emptyProductSub: {
     ...typography.caption,
     color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
+  selectProductPillBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.primary,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+  },
+  selectProductPillBtnText: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: colors.white,
   },
   typeGrid: {
     flexDirection: 'row',

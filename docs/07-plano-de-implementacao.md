@@ -75,6 +75,7 @@
 - [x] Motor global de Toast 60fps nativo estilo Sonner / Dynamic Island (`ToastProvider`, `useToast`, `showGlobalToast` em `src/components/ui/Toast.tsx` e `src/app/_layout.tsx`), substituindo banners estáticos e alertas bloqueantes em todo o app (Vendas, Estoque, Clientes, Produtos, Despesas, Relatórios, Auth e WhatsApp).
 - [x] Otimização de UI/UX em fluxos de carregamento: abertura a 0ms de novos formulários (Produtos e Despesas) com chips inline assíncronos e eliminação de telas de loading bloqueantes após ações de botão (confirmação/cancelamento de venda, baixa de parcelas e revalidação de detalhes in-place com `hasLoadedRef`).
 - [x] Padronização do gesto pull-to-refresh em Catálogo e Clientes: integração do campo de busca e chips de filtro ao `ListHeaderComponent` e `ListEmptyComponent` do `FlatList`, alinhando a animação de recarregamento ao topo do `AppHeader` como em Vendas, Estoque e Despesas (`src/app/products/index.tsx`, `src/app/customers/index.tsx`).
+- [x] Modais modernos de seleção (`CustomerPickerModal` e `ProductPickerModal`): substituição de listas inline expansivas por bottom sheets na Nova Venda e no Movimentar Estoque, com carrinho focado no checkout, busca integrada e atalhos ergonômicos (`src/components/ui/CustomerPickerModal.tsx`, `src/components/ui/ProductPickerModal.tsx`, `src/app/sales/new.tsx`, `src/app/inventory/adjust.tsx`).
 
 ## Fase 9 — APK
 - [x] Testes RLS e fluxos ponta a ponta (`supabase/tests/phase9_final_rls_and_pricing_test.sql` + 79 testes automatizados com Vitest).

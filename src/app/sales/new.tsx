@@ -1,6 +1,6 @@
-import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Ionicons } from "@expo/vector-icons";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Modal,
@@ -9,11 +9,12 @@ import {
   StyleSheet,
   Text,
   View,
-} from 'react-native';
+} from "react-native";
 
 import {
   AppHeader,
   BarcodeScannerModal,
+  CustomerPickerModal,
   DatePickerField,
   EmptyState,
   ErrorState,
@@ -21,25 +22,25 @@ import {
   LoadingState,
   MoneyText,
   PrimaryButton,
+  ProductPickerModal,
   Screen,
-  SearchField,
   SecondaryButton,
   StatusBadge,
   ToastOverlay,
   useToast,
-} from '@/components/ui';
-import { colors, radius, spacing, typography } from '@/constants/theme';
-import { useSession } from '@/features/auth/SessionProvider';
-import { getCustomerInitials } from '@/features/customers/schemas';
-import { listWorkspaceCustomers } from '@/features/customers/services';
+} from "@/components/ui";
+import { colors, radius, spacing, typography } from "@/constants/theme";
+import { useSession } from "@/features/auth/SessionProvider";
+import { getCustomerInitials } from "@/features/customers/schemas";
+import { listWorkspaceCustomers } from "@/features/customers/services";
 import {
   addDaysToISODate,
   buildInstallmentPreview,
   getTodayISODate,
   parseBRDateInputToISO,
   PAYMENT_METHOD_OPTIONS,
-} from '@/features/finance/schemas';
-import { listWorkspaceProducts } from '@/features/products/services';
+} from "@/features/finance/schemas";
+import { listWorkspaceProducts } from "@/features/products/services";
 import {
   addOrIncrementCartItem,
   calculateCartTotals,
@@ -49,25 +50,25 @@ import {
   updateCartItemQuantity,
   updateCartItemUnitPrice,
   validateSaleSubmission,
-} from '@/features/sales/schemas';
+} from "@/features/sales/schemas";
 import {
   createOrConfirmWorkspaceSale,
   getWorkspaceSaleDetail,
   mapSaleServiceError,
   updateWorkspaceDraftSale,
-} from '@/features/sales/services';
+} from "@/features/sales/services";
 import type {
   CustomerRow,
   PaymentMethod,
   ProductRow,
   SalePaymentMode,
-} from '@/types/database';
+} from "@/types/database";
 import {
   formatCentsToBRL,
   formatDateBR,
   maskBRLCurrencyInput,
   parseBRLInputToCents,
-} from '@/utils/formatters';
+} from "@/utils/formatters";
 
 const INSTALLMENT_QUICK_COUNTS = [1, 2, 3, 4, 6, 12];
 
@@ -90,31 +91,27 @@ export default function NewSaleScreen() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(
     params.customerId ?? null,
   );
-  const [isPickingCustomer, setIsPickingCustomer] = useState(false);
-  const [customerSearch, setCustomerSearch] = useState('');
+  const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
+  const [productPickerOpen, setProductPickerOpen] = useState(false);
 
   const [cart, setCart] = useState<SaleCartItem[]>([]);
   const [editingPriceProductId, setEditingPriceProductId] = useState<
     string | null
   >(null);
-  const [editingPriceInput, setEditingPriceInput] = useState('');
+  const [editingPriceInput, setEditingPriceInput] = useState("");
   const [editingPriceError, setEditingPriceError] = useState<string | null>(
     null,
   );
   const [scannerModalOpen, setScannerModalOpen] = useState(false);
   const { toast, showToast, hideToast } = useToast();
-  const [isAddingProduct, setIsAddingProduct] = useState(
-    !params.productId && !params.draftSaleId,
-  );
-  const [productSearch, setProductSearch] = useState('');
 
-  const [discountInput, setDiscountInput] = useState('');
-  const [notes, setNotes] = useState('');
+  const [discountInput, setDiscountInput] = useState("");
+  const [notes, setNotes] = useState("");
 
-  const [paymentMode, setPaymentMode] = useState<SalePaymentMode>('cash');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
-  const [downPaymentInput, setDownPaymentInput] = useState('');
-  const [installmentCountInput, setInstallmentCountInput] = useState('1');
+  const [paymentMode, setPaymentMode] = useState<SalePaymentMode>("cash");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pix");
+  const [downPaymentInput, setDownPaymentInput] = useState("");
+  const [installmentCountInput, setInstallmentCountInput] = useState("1");
   const [saleDateInput, setSaleDateInput] = useState(() =>
     formatDateBR(new Date()),
   );
@@ -160,11 +157,11 @@ export default function NewSaleScreen() {
 
       if (params.draftSaleId) {
         if (!draftDetail) {
-          setLoadError('Rascunho não encontrado neste espaço de trabalho.');
+          setLoadError("Rascunho não encontrado neste espaço de trabalho.");
           return;
         }
-        if (draftDetail.sale.status !== 'draft') {
-          setLoadError('Apenas vendas em rascunho podem ser editadas.');
+        if (draftDetail.sale.status !== "draft") {
+          setLoadError("Apenas vendas em rascunho podem ser editadas.");
           return;
         }
 
@@ -175,18 +172,18 @@ export default function NewSaleScreen() {
             draftDetail.sale.discount_cents > 0
               ? (draftDetail.sale.discount_cents / 100)
                   .toFixed(2)
-                  .replace('.', ',')
-              : '',
+                  .replace(".", ",")
+              : "",
           );
-          setNotes(draftDetail.sale.notes ?? '');
-          setPaymentMode(draftDetail.sale.payment_mode ?? 'cash');
-          setPaymentMethod(draftDetail.sale.payment_method ?? 'pix');
+          setNotes(draftDetail.sale.notes ?? "");
+          setPaymentMode(draftDetail.sale.payment_mode ?? "cash");
+          setPaymentMethod(draftDetail.sale.payment_method ?? "pix");
           setDownPaymentInput(
             (draftDetail.sale.down_payment_cents ?? 0) > 0
               ? ((draftDetail.sale.down_payment_cents ?? 0) / 100)
                   .toFixed(2)
-                  .replace('.', ',')
-              : '',
+                  .replace(".", ",")
+              : "",
           );
           setInstallmentCountInput(
             String(draftDetail.sale.installment_count ?? 1),
@@ -214,15 +211,12 @@ export default function NewSaleScreen() {
               catalogPriceCents:
                 catalogProduct?.price_cents ?? item.unit_price_cents,
               unitCostCents: catalogProduct?.cost_cents ?? item.unit_cost_cents,
-              availableStockQty: Number(
-                catalogProduct?.current_stock_qty ?? 0,
-              ),
+              availableStockQty: Number(catalogProduct?.current_stock_qty ?? 0),
               quantity: Number(item.quantity),
             };
           });
 
           setCart(hydratedCart);
-          setIsAddingProduct(false);
         }
         return;
       }
@@ -246,7 +240,6 @@ export default function NewSaleScreen() {
               ? addOrIncrementCartItem([], foundProduct, 1)
               : prev,
           );
-          setIsAddingProduct(false);
         }
       }
     } catch (error) {
@@ -302,15 +295,15 @@ export default function NewSaleScreen() {
     }
     const parsed = parseBRLInputToCents(editingPriceInput);
     if (parsed === null || parsed <= 0) {
-      setEditingPriceError('Informe um preço unitário válido maior que zero.');
+      setEditingPriceError("Informe um preço unitário válido maior que zero.");
       return;
     }
     setCart((prev) =>
       updateCartItemUnitPrice(prev, editingPriceItem.productId, parsed),
     );
     showToast({
-      tone: 'info',
-      title: 'Preço especial aplicado',
+      tone: "info",
+      title: "Preço especial aplicado",
       message: `${editingPriceItem.productName}: ${formatCentsToBRL(parsed)} por un. nesta venda.`,
     });
     setEditingPriceProductId(null);
@@ -327,43 +320,13 @@ export default function NewSaleScreen() {
       updateCartItemUnitPrice(prev, editingPriceItem.productId, catalogPrice),
     );
     showToast({
-      tone: 'info',
-      title: 'Preço de tabela restaurado',
+      tone: "info",
+      title: "Preço de tabela restaurado",
       message: `${editingPriceItem.productName}: ${formatCentsToBRL(catalogPrice)} por un.`,
     });
     setEditingPriceProductId(null);
     setEditingPriceError(null);
   }
-
-  const filteredCustomers = useMemo(() => {
-    const q = customerSearch.trim().toLowerCase();
-    if (!q) {
-      return customers.slice(0, 10);
-    }
-    return customers
-      .filter(
-        (c) =>
-          c.full_name.toLowerCase().includes(q) ||
-          (c.phone && c.phone.toLowerCase().includes(q)),
-      )
-      .slice(0, 10);
-  }, [customerSearch, customers]);
-
-  const filteredProducts = useMemo(() => {
-    const q = productSearch.trim().toLowerCase();
-    if (!q) {
-      return products.slice(0, 12);
-    }
-    return products
-      .filter(
-        (p) =>
-          p.name.toLowerCase().includes(q) ||
-          (p.sku && p.sku.toLowerCase().includes(q)) ||
-          (p.barcode && p.barcode.toLowerCase().includes(q)) ||
-          (p.brand && p.brand.toLowerCase().includes(q)),
-      )
-      .slice(0, 12);
-  }, [productSearch, products]);
 
   function handleBarcodeScannedInSale(rawCode: string): void {
     setScannerModalOpen(false);
@@ -380,8 +343,8 @@ export default function NewSaleScreen() {
 
     if (!found) {
       showToast({
-        tone: 'warning',
-        title: 'Produto não encontrado',
+        tone: "warning",
+        title: "Produto não encontrado",
         message: `Nenhum produto ativo com o código "${cleaned}" no seu catálogo.`,
       });
       return;
@@ -389,8 +352,8 @@ export default function NewSaleScreen() {
 
     setCart((prev) => addOrIncrementCartItem(prev, found, 1));
     showToast({
-      tone: 'success',
-      title: 'Adicionado ao carrinho!',
+      tone: "success",
+      title: "Adicionado ao carrinho!",
       message: `${found.name} (+1 un. • ${formatCentsToBRL(found.price_cents)})`,
     });
   }
@@ -443,10 +406,10 @@ export default function NewSaleScreen() {
 
     if (!validation.success || !validation.payload) {
       const msg =
-        validation.errorMessage ?? 'Revise os dados da venda antes de salvar.';
+        validation.errorMessage ?? "Revise os dados da venda antes de salvar.";
       showToast({
-        tone: 'warning',
-        title: 'Revise os dados da venda',
+        tone: "warning",
+        title: "Revise os dados da venda",
         message: msg,
       });
       return;
@@ -487,18 +450,18 @@ export default function NewSaleScreen() {
           });
 
       showToast({
-        tone: 'success',
-        title: confirmImmediately ? 'Venda confirmada!' : 'Rascunho salvo!',
+        tone: "success",
+        title: confirmImmediately ? "Venda confirmada!" : "Rascunho salvo!",
         message: confirmImmediately
           ? `Total de ${formatCentsToBRL(totals.totalCents)} registrado com sucesso.`
-          : 'O rascunho foi salvo e pode ser editado quando quiser.',
+          : "O rascunho foi salvo e pode ser editado quando quiser.",
       });
       router.replace(`/sales/${result.sale_id}`);
     } catch (error) {
       const errMsg = mapSaleServiceError(error);
       showToast({
-        tone: 'error',
-        title: 'Não foi possível concluir a venda',
+        tone: "error",
+        title: "Não foi possível concluir a venda",
         message: errMsg,
       });
     } finally {
@@ -512,8 +475,8 @@ export default function NewSaleScreen() {
         <LoadingState
           message={
             isEditingDraft
-              ? 'Carregando rascunho da venda...'
-              : 'Preparando ponto de venda...'
+              ? "Carregando rascunho da venda..."
+              : "Preparando ponto de venda..."
           }
         />
       </Screen>
@@ -524,7 +487,7 @@ export default function NewSaleScreen() {
     return (
       <Screen>
         <AppHeader
-          title={isEditingDraft ? 'Editar rascunho' : 'Nova venda'}
+          title={isEditingDraft ? "Editar rascunho" : "Nova venda"}
           showBack
         />
         <ErrorState
@@ -542,7 +505,7 @@ export default function NewSaleScreen() {
     return (
       <Screen>
         <AppHeader
-          title={isEditingDraft ? 'Editar rascunho' : 'Nova venda'}
+          title={isEditingDraft ? "Editar rascunho" : "Nova venda"}
           showBack
         />
         <EmptyState
@@ -550,7 +513,7 @@ export default function NewSaleScreen() {
           title="Nenhum produto ativo no catálogo"
           description="Cadastre pelo menos um produto ativo antes de iniciar uma venda."
           actionLabel="Cadastrar produto"
-          onActionPress={() => router.replace('/products/new')}
+          onActionPress={() => router.replace("/products/new")}
         />
       </Screen>
     );
@@ -560,825 +523,781 @@ export default function NewSaleScreen() {
     <>
       <Screen>
         <AppHeader
-          title={isEditingDraft ? 'Editar rascunho' : 'Nova venda'}
+          title={isEditingDraft ? "Editar rascunho" : "Nova venda"}
           subtitle={
             isEditingDraft
-              ? 'Altere cliente, itens ou desconto antes de confirmar'
-              : 'Carrinho multi-itens com baixa de estoque'
+              ? "Altere cliente, itens ou desconto antes de confirmar"
+              : "Carrinho multi-itens com baixa de estoque"
           }
           showBack
         />
 
-      {/* 1. Cliente (Opcional — RF-040) */}
-      <View style={styles.card}>
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>1. Cliente (opcional)</Text>
-          {selectedCustomer && !isPickingCustomer ? (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => setSelectedCustomerId(null)}
-            >
-              <Text style={styles.linkActionText}>Remover vínculo</Text>
-            </Pressable>
-          ) : null}
-        </View>
-
-        {selectedCustomer && !isPickingCustomer ? (
-          <View style={styles.selectedCustomerBox}>
-            <View style={styles.customerAvatar}>
-              <Text style={styles.customerAvatarText}>
-                {getCustomerInitials(selectedCustomer.full_name)}
-              </Text>
-            </View>
-            <View style={styles.customerInfoCol}>
-              <Text style={styles.customerNameText} numberOfLines={1}>
-                {selectedCustomer.full_name}
-              </Text>
-              <Text style={styles.customerPhoneText}>
-                {selectedCustomer.phone ?? 'Sem telefone cadastrado'}
-              </Text>
-            </View>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => setIsPickingCustomer(true)}
-              style={styles.pillButton}
-            >
-              <Text style={styles.pillButtonText}>Trocar</Text>
-            </Pressable>
-          </View>
-        ) : !isPickingCustomer ? (
-          <View style={styles.walkInBox}>
-            <View style={styles.walkInInfo}>
-              <Ionicons
-                name="person-outline"
-                size={20}
-                color={colors.primaryDark}
-              />
-              <Text style={styles.walkInText}>
-                Venda avulsa (Balcão — sem cliente vinculado)
-              </Text>
-            </View>
-            {customers.length > 0 ? (
+        {/* 1. Cliente (Opcional — RF-040) */}
+        <View style={styles.card}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>1. Cliente (opcional)</Text>
+            {selectedCustomer ? (
               <Pressable
                 accessibilityRole="button"
-                onPress={() => setIsPickingCustomer(true)}
+                onPress={() => setSelectedCustomerId(null)}
+              >
+                <Text style={styles.linkActionText}>Remover vínculo</Text>
+              </Pressable>
+            ) : null}
+          </View>
+
+          {selectedCustomer ? (
+            <View style={styles.selectedCustomerBox}>
+              <View style={styles.customerAvatar}>
+                <Text style={styles.customerAvatarText}>
+                  {getCustomerInitials(selectedCustomer.full_name)}
+                </Text>
+              </View>
+              <View style={styles.customerInfoCol}>
+                <Text style={styles.customerNameText} numberOfLines={1}>
+                  {selectedCustomer.full_name}
+                </Text>
+                <Text style={styles.customerPhoneText}>
+                  {selectedCustomer.phone ?? "Sem telefone cadastrado"}
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setCustomerPickerOpen(true)}
+                style={styles.pillButton}
+              >
+                <Text style={styles.pillButtonText}>Trocar</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <View style={styles.walkInBox}>
+              <View style={styles.walkInInfo}>
+                <Ionicons
+                  name="person-outline"
+                  size={20}
+                  color={colors.primaryDark}
+                />
+                <Text style={styles.walkInText}>
+                  Venda avulsa (Balcão — sem cliente vinculado)
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setCustomerPickerOpen(true)}
                 style={styles.pillButton}
               >
                 <Text style={styles.pillButtonText}>Vincular cliente</Text>
               </Pressable>
-            ) : null}
-          </View>
-        ) : (
-          <View style={styles.pickerBox}>
-            <SearchField
-              value={customerSearch}
-              onChangeText={setCustomerSearch}
-              placeholder="Buscar cliente por nome ou telefone..."
-            />
-            <View style={styles.optionList}>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => {
-                  setSelectedCustomerId(null);
-                  setIsPickingCustomer(false);
-                }}
-                style={styles.optionItem}
-              >
-                <Text style={styles.optionItemTitle}>
-                  Venda avulsa (sem cliente)
-                </Text>
-                <Ionicons
-                  name="chevron-forward"
-                  size={16}
-                  color={colors.textSecondary}
-                />
-              </Pressable>
-              {filteredCustomers.map((cust) => (
-                <Pressable
-                  key={cust.id}
-                  accessibilityRole="button"
-                  onPress={() => {
-                    setSelectedCustomerId(cust.id);
-                    setIsPickingCustomer(false);
-                  }}
-                  style={styles.optionItem}
-                >
-                  <View style={styles.optionTextCol}>
-                    <Text style={styles.optionItemTitle} numberOfLines={1}>
-                      {cust.full_name}
-                    </Text>
-                    {cust.phone ? (
-                      <Text style={styles.optionItemSub}>{cust.phone}</Text>
-                    ) : null}
-                  </View>
-                  <Ionicons
-                    name="add-circle-outline"
-                    size={20}
-                    color={colors.primary}
-                  />
-                </Pressable>
-              ))}
             </View>
-          </View>
-        )}
-      </View>
-
-      {/* 2. Itens do Carrinho (RF-040 / RF-041) */}
-      <View style={styles.card}>
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>
-            2. Produtos ({cart.length})
-          </Text>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => setIsAddingProduct((prev) => !prev)}
-            style={styles.pillButton}
-          >
-            <Text style={styles.pillButtonText}>
-              {isAddingProduct ? 'Fechar catálogo' : '+ Adicionar produto'}
-            </Text>
-          </Pressable>
+          )}
         </View>
 
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => setScannerModalOpen(true)}
-          style={styles.barcodeScanActionBar}
-        >
-          <View style={styles.barcodeScanActionIconWrap}>
+        {/* 2. Itens do Carrinho (RF-040 / RF-041) */}
+        <View style={styles.card}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>2. Produtos ({cart.length})</Text>
+            {cart.length > 3 ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setProductPickerOpen(true)}
+                style={styles.pillButtonPrimary}
+              >
+                <Ionicons name="add" size={16} color={colors.white} />
+                <Text style={styles.pillButtonPrimaryText}>Adicionar</Text>
+              </Pressable>
+            ) : null}
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setScannerModalOpen(true)}
+            style={styles.barcodeScanActionBar}
+          >
+            <View style={styles.barcodeScanActionIconWrap}>
+              <Ionicons
+                name="barcode-outline"
+                size={18}
+                color={colors.primaryDark}
+              />
+            </View>
+            <View style={styles.barcodeScanActionTextCol}>
+              <Text style={styles.barcodeScanActionTitle}>
+                Escanear código de barras
+              </Text>
+              <Text style={styles.barcodeScanActionSub}>
+                Aponte a câmera para adicionar o produto direto ao carrinho
+              </Text>
+            </View>
             <Ionicons
-              name="barcode-outline"
+              name="scan-outline"
               size={18}
               color={colors.primaryDark}
             />
-          </View>
-          <View style={styles.barcodeScanActionTextCol}>
-            <Text style={styles.barcodeScanActionTitle}>
-              Escanear código de barras
-            </Text>
-            <Text style={styles.barcodeScanActionSub}>
-              Aponte a câmera para adicionar o produto direto ao carrinho
-            </Text>
-          </View>
-          <Ionicons
-            name="scan-outline"
-            size={18}
-            color={colors.primaryDark}
+          </Pressable>
+
+          {cart.length > 0 ? (
+            <View style={styles.cartList}>
+              {cart.map((item) => {
+                const lineTotalCents = Math.round(
+                  item.quantity * item.unitPriceCents,
+                );
+                const isOverflow = item.quantity > item.availableStockQty;
+                const catalogPrice =
+                  item.catalogPriceCents ?? item.unitPriceCents;
+                const isCustomPrice = item.unitPriceCents !== catalogPrice;
+
+                return (
+                  <View
+                    key={item.productId}
+                    style={[
+                      styles.cartItemCard,
+                      isOverflow ? styles.cartItemOverflow : null,
+                    ]}
+                  >
+                    <View style={styles.cartItemTop}>
+                      <View style={styles.cartItemInfo}>
+                        <Text style={styles.cartItemName} numberOfLines={1}>
+                          {item.productName}
+                        </Text>
+                        <Text style={styles.cartItemMeta}>
+                          {formatCentsToBRL(item.unitPriceCents)} / un. • Disp.:{" "}
+                          {item.availableStockQty} un.
+                        </Text>
+                        {isCustomPrice ? (
+                          <Text style={styles.customPriceNoticeText}>
+                            Preço negociado nesta venda (Tabela:{" "}
+                            {formatCentsToBRL(catalogPrice)})
+                          </Text>
+                        ) : null}
+                      </View>
+                      <MoneyText
+                        cents={lineTotalCents}
+                        size="sm"
+                        tone="primary"
+                      />
+                    </View>
+
+                    <View style={styles.cartItemControlsRow}>
+                      <View style={styles.cartItemLeftActions}>
+                        {isOverflow ? (
+                          <StatusBadge
+                            label={`Acima do estoque (${item.availableStockQty} disp.)`}
+                            tone="error"
+                          />
+                        ) : null}
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => handleOpenEditPriceModal(item)}
+                          style={[
+                            styles.editUnitPricePill,
+                            isCustomPrice
+                              ? styles.editUnitPricePillActive
+                              : null,
+                          ]}
+                        >
+                          <Ionicons
+                            name="pricetag-outline"
+                            size={13}
+                            color={colors.primaryDark}
+                          />
+                          <Text style={styles.editUnitPricePillText}>
+                            {isCustomPrice
+                              ? "Ajustar preço"
+                              : "Editar preço un."}
+                          </Text>
+                        </Pressable>
+                      </View>
+
+                      <View style={styles.stepperRow}>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="Diminuir quantidade"
+                          onPress={() =>
+                            setCart((prev) =>
+                              updateCartItemQuantity(
+                                prev,
+                                item.productId,
+                                item.quantity - 1,
+                              ),
+                            )
+                          }
+                          style={styles.stepperButton}
+                        >
+                          <Ionicons
+                            name={
+                              item.quantity <= 1 ? "trash-outline" : "remove"
+                            }
+                            size={18}
+                            color={
+                              item.quantity <= 1 ? colors.error : colors.text
+                            }
+                          />
+                        </Pressable>
+
+                        <Text style={styles.stepperQtyText}>
+                          {item.quantity}
+                        </Text>
+
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="Aumentar quantidade"
+                          onPress={() =>
+                            setCart((prev) =>
+                              updateCartItemQuantity(
+                                prev,
+                                item.productId,
+                                item.quantity + 1,
+                              ),
+                            )
+                          }
+                          style={styles.stepperButton}
+                        >
+                          <Ionicons
+                            name="add"
+                            size={18}
+                            color={colors.primary}
+                          />
+                        </Pressable>
+                      </View>
+                    </View>
+                  </View>
+                );
+              })}
+
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setProductPickerOpen(true)}
+                style={styles.addMoreItemsButton}
+              >
+                <Ionicons
+                  name="add-circle-outline"
+                  size={18}
+                  color={colors.primary}
+                />
+                <Text style={styles.addMoreItemsButtonText}>
+                  Adicionar mais produtos
+                </Text>
+              </Pressable>
+            </View>
+          ) : (
+            <View style={styles.emptyCartNotice}>
+              <Ionicons
+                name="cart-outline"
+                size={32}
+                color={colors.textSecondary}
+              />
+              <Text style={styles.emptyCartTitle}>Seu carrinho está vazio</Text>
+              <Text style={styles.emptyCartText}>
+                Adicione itens do catálogo ou aponte a câmera para o código de
+                barras.
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setProductPickerOpen(true)}
+                style={styles.emptyCartActionBtn}
+              >
+                <Ionicons name="add-circle" size={18} color={colors.white} />
+                <Text style={styles.emptyCartActionBtnText}>
+                  Adicionar produtos do catálogo
+                </Text>
+              </Pressable>
+            </View>
+          )}
+        </View>
+
+        {/* 3. Data e Condição de Pagamento (RF-050 / RF-051) */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>
+            3. Data e Condição de pagamento
+          </Text>
+
+          <DatePickerField
+            label="Data da venda *"
+            value={saleDateInput}
+            onChangeDate={handleSaleDateChange}
+            helperText="Padrão: Hoje. Altere para registrar vendas passadas."
           />
-        </Pressable>
 
-        {cart.length > 0 ? (
-          <View style={styles.cartList}>
-            {cart.map((item) => {
-              const lineTotalCents = Math.round(
-                item.quantity * item.unitPriceCents,
-              );
-              const isOverflow = item.quantity > item.availableStockQty;
-              const catalogPrice =
-                item.catalogPriceCents ?? item.unitPriceCents;
-              const isCustomPrice = item.unitPriceCents !== catalogPrice;
+          <View style={styles.modeSelectorRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ selected: paymentMode === "cash" }}
+              onPress={() => {
+                setPaymentMode("cash");
+              }}
+              style={[
+                styles.modeCard,
+                paymentMode === "cash" ? styles.modeCardActive : null,
+              ]}
+            >
+              <Ionicons
+                name="flash-outline"
+                size={20}
+                color={
+                  paymentMode === "cash"
+                    ? colors.primaryDark
+                    : colors.textSecondary
+                }
+              />
+              <Text
+                style={[
+                  styles.modeCardTitle,
+                  paymentMode === "cash" ? styles.modeCardTitleActive : null,
+                ]}
+              >
+                À vista
+              </Text>
+              <Text style={styles.modeCardSub}>Quitada no ato</Text>
+            </Pressable>
 
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ selected: paymentMode === "installments" }}
+              onPress={() => {
+                setPaymentMode("installments");
+              }}
+              style={[
+                styles.modeCard,
+                paymentMode === "installments" ? styles.modeCardActive : null,
+              ]}
+            >
+              <Ionicons
+                name="calendar-outline"
+                size={20}
+                color={
+                  paymentMode === "installments"
+                    ? colors.primaryDark
+                    : colors.textSecondary
+                }
+              />
+              <Text
+                style={[
+                  styles.modeCardTitle,
+                  paymentMode === "installments"
+                    ? styles.modeCardTitleActive
+                    : null,
+                ]}
+              >
+                Parcelado / A prazo
+              </Text>
+              <Text style={styles.modeCardSub}>Com ou sem entrada</Text>
+            </Pressable>
+          </View>
+
+          <Text style={styles.subLabel}>
+            {paymentMode === "cash"
+              ? "Forma de recebimento"
+              : "Forma de recebimento da entrada / padrão"}
+          </Text>
+          <View style={styles.chipGrid}>
+            {PAYMENT_METHOD_OPTIONS.map((opt) => {
+              const isSelected = paymentMethod === opt.value;
               return (
-                <View
-                  key={item.productId}
+                <Pressable
+                  key={opt.value}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isSelected }}
+                  onPress={() => setPaymentMethod(opt.value)}
                   style={[
-                    styles.cartItemCard,
-                    isOverflow ? styles.cartItemOverflow : null,
+                    styles.methodChip,
+                    isSelected ? styles.methodChipSelected : null,
                   ]}
                 >
-                  <View style={styles.cartItemTop}>
-                    <View style={styles.cartItemInfo}>
-                      <Text style={styles.cartItemName} numberOfLines={1}>
-                        {item.productName}
-                      </Text>
-                      <Text style={styles.cartItemMeta}>
-                        {formatCentsToBRL(item.unitPriceCents)} / un. • Disp.:{' '}
-                        {item.availableStockQty} un.
-                      </Text>
-                      {isCustomPrice ? (
-                        <Text style={styles.customPriceNoticeText}>
-                          Preço negociado nesta venda (Tabela:{' '}
-                          {formatCentsToBRL(catalogPrice)})
-                        </Text>
-                      ) : null}
-                    </View>
-                    <MoneyText
-                      cents={lineTotalCents}
-                      size="sm"
-                      tone="primary"
-                    />
-                  </View>
-
-                  <View style={styles.cartItemControlsRow}>
-                    <View style={styles.cartItemLeftActions}>
-                      {isOverflow ? (
-                        <StatusBadge
-                          label={`Acima do estoque (${item.availableStockQty} disp.)`}
-                          tone="error"
-                        />
-                      ) : null}
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={() => handleOpenEditPriceModal(item)}
-                        style={[
-                          styles.editUnitPricePill,
-                          isCustomPrice
-                            ? styles.editUnitPricePillActive
-                            : null,
-                        ]}
-                      >
-                        <Ionicons
-                          name="pricetag-outline"
-                          size={13}
-                          color={colors.primaryDark}
-                        />
-                        <Text style={styles.editUnitPricePillText}>
-                          {isCustomPrice
-                            ? 'Ajustar preço'
-                            : 'Editar preço un.'}
-                        </Text>
-                      </Pressable>
-                    </View>
-
-                    <View style={styles.stepperRow}>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Diminuir quantidade"
-                        onPress={() =>
-                          setCart((prev) =>
-                            updateCartItemQuantity(
-                              prev,
-                              item.productId,
-                              item.quantity - 1,
-                            ),
-                          )
-                        }
-                        style={styles.stepperButton}
-                      >
-                        <Ionicons
-                          name={
-                            item.quantity <= 1 ? 'trash-outline' : 'remove'
-                          }
-                          size={18}
-                          color={
-                            item.quantity <= 1 ? colors.error : colors.text
-                          }
-                        />
-                      </Pressable>
-
-                      <Text style={styles.stepperQtyText}>
-                        {item.quantity}
-                      </Text>
-
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Aumentar quantidade"
-                        onPress={() =>
-                          setCart((prev) =>
-                            updateCartItemQuantity(
-                              prev,
-                              item.productId,
-                              item.quantity + 1,
-                            ),
-                          )
-                        }
-                        style={styles.stepperButton}
-                      >
-                        <Ionicons name="add" size={18} color={colors.primary} />
-                      </Pressable>
-                    </View>
-                  </View>
-                </View>
+                  <Text
+                    style={[
+                      styles.methodChipText,
+                      isSelected ? styles.methodChipTextSelected : null,
+                    ]}
+                  >
+                    {opt.label}
+                  </Text>
+                </Pressable>
               );
             })}
           </View>
-        ) : (
-          <View style={styles.emptyCartNotice}>
-            <Ionicons
-              name="cart-outline"
-              size={22}
-              color={colors.textSecondary}
-            />
-            <Text style={styles.emptyCartText}>
-              Toque nos produtos abaixo para adicioná-los ao carrinho.
-            </Text>
-          </View>
-        )}
 
-        {isAddingProduct ? (
-          <View style={styles.catalogPickerWrap}>
-            <SearchField
-              value={productSearch}
-              onChangeText={setProductSearch}
-              placeholder="Buscar produto para adicionar..."
-            />
-            <View style={styles.optionList}>
-              {filteredProducts.map((product) => {
-                const inCart = cart.find((c) => c.productId === product.id);
-                const stockQty = Number(product.current_stock_qty ?? 0);
+          {paymentMode === "installments" ? (
+            <View style={styles.installmentsConfigBox}>
+              <FormField
+                label="Entrada em R$ (opcional)"
+                placeholder="0,00"
+                keyboardType="decimal-pad"
+                value={downPaymentInput}
+                onChangeText={(val) => {
+                  setDownPaymentInput(maskBRLCurrencyInput(val));
+                }}
+              />
 
-                return (
-                  <Pressable
-                    key={product.id}
-                    accessibilityRole="button"
-                    onPress={() => {
-                      setCart((prev) =>
-                        addOrIncrementCartItem(prev, product, 1),
-                      );
-                    }}
-                    style={[
-                      styles.optionItem,
-                      inCart ? styles.optionItemSelected : null,
-                    ]}
-                  >
-                    <View style={styles.optionTextCol}>
-                      <Text style={styles.optionItemTitle} numberOfLines={1}>
-                        {product.name}
-                      </Text>
-                      <Text style={styles.optionItemSub}>
-                        {formatCentsToBRL(product.price_cents)} • Estoque:{' '}
-                        {stockQty} un.
-                      </Text>
-                    </View>
+              <DatePickerField
+                label="1º vencimento *"
+                value={firstDueDateInput}
+                onChangeDate={(val) => {
+                  setFirstDueDateInput(val);
+                }}
+              />
 
-                    <View style={styles.addProductRight}>
-                      {inCart ? (
-                        <StatusBadge
-                          label={`No carrinho: ${inCart.quantity}`}
-                          tone="success"
-                        />
-                      ) : null}
-                      <Ionicons
-                        name="add-circle"
-                        size={24}
-                        color={colors.primary}
-                      />
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-        ) : null}
-      </View>
-
-      {/* 3. Data e Condição de Pagamento (RF-050 / RF-051) */}
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>3. Data e Condição de pagamento</Text>
-
-        <DatePickerField
-          label="Data da venda *"
-          value={saleDateInput}
-          onChangeDate={handleSaleDateChange}
-          helperText="Padrão: Hoje. Altere para registrar vendas passadas."
-        />
-
-        <View style={styles.modeSelectorRow}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ selected: paymentMode === 'cash' }}
-            onPress={() => {
-              setPaymentMode('cash');
-            }}
-            style={[
-              styles.modeCard,
-              paymentMode === 'cash' ? styles.modeCardActive : null,
-            ]}
-          >
-            <Ionicons
-              name="flash-outline"
-              size={20}
-              color={
-                paymentMode === 'cash'
-                  ? colors.primaryDark
-                  : colors.textSecondary
-              }
-            />
-            <Text
-              style={[
-                styles.modeCardTitle,
-                paymentMode === 'cash' ? styles.modeCardTitleActive : null,
-              ]}
-            >
-              À vista
-            </Text>
-            <Text style={styles.modeCardSub}>Quitada no ato</Text>
-          </Pressable>
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ selected: paymentMode === 'installments' }}
-            onPress={() => {
-              setPaymentMode('installments');
-            }}
-            style={[
-              styles.modeCard,
-              paymentMode === 'installments' ? styles.modeCardActive : null,
-            ]}
-          >
-            <Ionicons
-              name="calendar-outline"
-              size={20}
-              color={
-                paymentMode === 'installments'
-                  ? colors.primaryDark
-                  : colors.textSecondary
-              }
-            />
-            <Text
-              style={[
-                styles.modeCardTitle,
-                paymentMode === 'installments'
-                  ? styles.modeCardTitleActive
-                  : null,
-              ]}
-            >
-              Parcelado / A prazo
-            </Text>
-            <Text style={styles.modeCardSub}>Com ou sem entrada</Text>
-          </Pressable>
-        </View>
-
-        <Text style={styles.subLabel}>
-          {paymentMode === 'cash'
-            ? 'Forma de recebimento'
-            : 'Forma de recebimento da entrada / padrão'}
-        </Text>
-        <View style={styles.chipGrid}>
-          {PAYMENT_METHOD_OPTIONS.map((opt) => {
-            const isSelected = paymentMethod === opt.value;
-            return (
-              <Pressable
-                key={opt.value}
-                accessibilityRole="button"
-                accessibilityState={{ selected: isSelected }}
-                onPress={() => setPaymentMethod(opt.value)}
-                style={[
-                  styles.methodChip,
-                  isSelected ? styles.methodChipSelected : null,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.methodChipText,
-                    isSelected ? styles.methodChipTextSelected : null,
-                  ]}
-                >
-                  {opt.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        {paymentMode === 'installments' ? (
-          <View style={styles.installmentsConfigBox}>
-            <FormField
-              label="Entrada em R$ (opcional)"
-              placeholder="0,00"
-              keyboardType="decimal-pad"
-              value={downPaymentInput}
-              onChangeText={(val) => {
-                setDownPaymentInput(maskBRLCurrencyInput(val));
-              }}
-            />
-
-            <DatePickerField
-              label="1º vencimento *"
-              value={firstDueDateInput}
-              onChangeDate={(val) => {
-                setFirstDueDateInput(val);
-              }}
-            />
-
-            <Text style={styles.subLabel}>Quantidade de parcelas</Text>
-            <View style={styles.chipGrid}>
-              {INSTALLMENT_QUICK_COUNTS.map((countVal) => {
-                const isSelected =
-                  Number(installmentCountInput) === countVal;
-                return (
-                  <Pressable
-                    key={countVal}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: isSelected }}
-                    onPress={() => {
-                      setInstallmentCountInput(String(countVal));
-                    }}
-                    style={[
-                      styles.methodChip,
-                      isSelected ? styles.methodChipSelected : null,
-                    ]}
-                  >
-                    <Text
+              <Text style={styles.subLabel}>Quantidade de parcelas</Text>
+              <View style={styles.chipGrid}>
+                {INSTALLMENT_QUICK_COUNTS.map((countVal) => {
+                  const isSelected = Number(installmentCountInput) === countVal;
+                  return (
+                    <Pressable
+                      key={countVal}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: isSelected }}
+                      onPress={() => {
+                        setInstallmentCountInput(String(countVal));
+                      }}
                       style={[
-                        styles.methodChipText,
-                        isSelected ? styles.methodChipTextSelected : null,
+                        styles.methodChip,
+                        isSelected ? styles.methodChipSelected : null,
                       ]}
                     >
-                      {countVal}x
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            <FormField
-              label="Ou digite o número de parcelas (1 a 36)"
-              placeholder="1"
-              keyboardType="number-pad"
-              value={installmentCountInput}
-              onChangeText={(val) => {
-                setInstallmentCountInput(val);
-              }}
-            />
-
-            {installmentPreview.length > 0 && totals.totalCents > 0 ? (
-              <View style={styles.previewScheduleBox}>
-                <Text style={styles.previewScheduleTitle}>
-                  Cronograma de parcelas ({installmentPreview.length})
-                </Text>
-                {installmentPreview.slice(0, 6).map((p) => (
-                  <View
-                    key={`${p.installmentNumber}_${p.dueDateISO}`}
-                    style={styles.previewScheduleRow}
-                  >
-                    <Text style={styles.previewScheduleLabel}>
-                      {p.isEntry
-                        ? `Entrada (hoje — ${formatDateBR(p.dueDateISO)})`
-                        : `Parcela ${p.installmentNumber}/${p.totalInstallments} (${formatDateBR(p.dueDateISO)})`}
-                    </Text>
-                    <Text style={styles.previewScheduleAmount}>
-                      {formatCentsToBRL(p.amountCents)}
-                    </Text>
-                  </View>
-                ))}
-                {installmentPreview.length > 6 ? (
-                  <Text style={styles.previewMoreText}>
-                    + {installmentPreview.length - 6} parcelas mensais seguintes
-                  </Text>
-                ) : null}
+                      <Text
+                        style={[
+                          styles.methodChipText,
+                          isSelected ? styles.methodChipTextSelected : null,
+                        ]}
+                      >
+                        {countVal}x
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </View>
-            ) : null}
-          </View>
-        ) : null}
-      </View>
 
-      {/* 4. Desconto, Observação e Fechamento (RF-042 / RF-043) */}
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>4. Resumo e fechamento</Text>
+              <FormField
+                label="Ou digite o número de parcelas (1 a 36)"
+                placeholder="1"
+                keyboardType="number-pad"
+                value={installmentCountInput}
+                onChangeText={(val) => {
+                  setInstallmentCountInput(val);
+                }}
+              />
 
-        <FormField
-          label="Desconto em R$ (opcional)"
-          placeholder="0,00"
-          keyboardType="decimal-pad"
-          value={discountInput}
-          onChangeText={(val) => {
-            setDiscountInput(maskBRLCurrencyInput(val));
-          }}
-        />
-
-        <FormField
-          label="Observação da venda (opcional)"
-          placeholder="Ex.: Entrega combinada para sexta-feira"
-          value={notes}
-          onChangeText={(val) => {
-            setNotes(val);
-          }}
-        />
-
-        <View style={styles.summaryBox}>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>
-              Subtotal ({totals.totalUnits} un.)
-            </Text>
-            <Text style={styles.summaryValue}>
-              {formatCentsToBRL(totals.subtotalCents)}
-            </Text>
-          </View>
-
-          {totals.discountCents > 0 ? (
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Desconto</Text>
-              <Text style={[styles.summaryValue, { color: colors.warning }]}>
-                - {formatCentsToBRL(totals.discountCents)}
-              </Text>
+              {installmentPreview.length > 0 && totals.totalCents > 0 ? (
+                <View style={styles.previewScheduleBox}>
+                  <Text style={styles.previewScheduleTitle}>
+                    Cronograma de parcelas ({installmentPreview.length})
+                  </Text>
+                  {installmentPreview.slice(0, 6).map((p) => (
+                    <View
+                      key={`${p.installmentNumber}_${p.dueDateISO}`}
+                      style={styles.previewScheduleRow}
+                    >
+                      <Text style={styles.previewScheduleLabel}>
+                        {p.isEntry
+                          ? `Entrada (hoje — ${formatDateBR(p.dueDateISO)})`
+                          : `Parcela ${p.installmentNumber}/${p.totalInstallments} (${formatDateBR(p.dueDateISO)})`}
+                      </Text>
+                      <Text style={styles.previewScheduleAmount}>
+                        {formatCentsToBRL(p.amountCents)}
+                      </Text>
+                    </View>
+                  ))}
+                  {installmentPreview.length > 6 ? (
+                    <Text style={styles.previewMoreText}>
+                      + {installmentPreview.length - 6} parcelas mensais
+                      seguintes
+                    </Text>
+                  ) : null}
+                </View>
+              ) : null}
             </View>
           ) : null}
-
-          <View style={styles.summaryDivider} />
-
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryTotalLabel}>Total da venda</Text>
-            <MoneyText cents={totals.totalCents} size="lg" tone="primary" />
-          </View>
-
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryCaption}>Lucro estimado na venda</Text>
-            <Text style={styles.summaryProfitText}>
-              {formatCentsToBRL(totals.estimatedProfitCents)}
-            </Text>
-          </View>
         </View>
 
-        <View style={styles.actionsColumn}>
-          <PrimaryButton
-            label="Finalizar e confirmar venda"
-            iconName="checkmark-circle-outline"
-            loading={isSubmitting}
-            onPress={() => {
-              void handleSubmit(true);
+        {/* 4. Desconto, Observação e Fechamento (RF-042 / RF-043) */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>4. Resumo e fechamento</Text>
+
+          <FormField
+            label="Desconto em R$ (opcional)"
+            placeholder="0,00"
+            keyboardType="decimal-pad"
+            value={discountInput}
+            onChangeText={(val) => {
+              setDiscountInput(maskBRLCurrencyInput(val));
             }}
           />
-          <SecondaryButton
-            label={
-              isEditingDraft
-                ? 'Salvar alterações no rascunho'
-                : 'Salvar como rascunho'
-            }
-            iconName="document-text-outline"
-            disabled={isSubmitting}
-            onPress={() => {
-              void handleSubmit(false);
+
+          <FormField
+            label="Observação da venda (opcional)"
+            placeholder="Ex.: Entrega combinada para sexta-feira"
+            value={notes}
+            onChangeText={(val) => {
+              setNotes(val);
             }}
           />
-        </View>
-      </View>
 
-      <BarcodeScannerModal
-        visible={scannerModalOpen}
-        title="Adicionar produto por código"
-        subtitle="Aponte a câmera para o código de barras do produto para incluí-lo no carrinho"
-        onScanned={handleBarcodeScannedInSale}
-        onClose={() => setScannerModalOpen(false)}
-      />
-
-      <Modal
-        visible={editingPriceItem !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={handleCloseEditPriceModal}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.modalBackdrop}
-        >
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeaderRow}>
-              <View style={styles.modalTitleRow}>
-                <View style={styles.modalIconCircle}>
-                  <Ionicons
-                    name="pricetag-outline"
-                    size={20}
-                    color={colors.primaryDark}
-                  />
-                </View>
-                <View style={styles.modalTitleCol}>
-                  <Text style={styles.modalTitle}>
-                    Preço unitário nesta venda
-                  </Text>
-                  <Text style={styles.modalSubtitle} numberOfLines={1}>
-                    {editingPriceItem?.productName ?? ''}
-                  </Text>
-                </View>
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Fechar"
-                onPress={handleCloseEditPriceModal}
-                style={styles.modalCloseBtn}
-              >
-                <Ionicons
-                  name="close"
-                  size={20}
-                  color={colors.textSecondary}
-                />
-              </Pressable>
+          <View style={styles.summaryBox}>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>
+                Subtotal ({totals.totalUnits} un.)
+              </Text>
+              <Text style={styles.summaryValue}>
+                {formatCentsToBRL(totals.subtotalCents)}
+              </Text>
             </View>
 
-            {editingPriceItem ? (
-              <>
-                <View style={styles.modalMetaRow}>
-                  <Text style={styles.modalMetaText}>
-                    Tabela:{' '}
-                    <Text style={styles.modalMetaStrong}>
-                      {formatCentsToBRL(
-                        editingPriceItem.catalogPriceCents ??
-                          editingPriceItem.unitPriceCents,
-                      )}
+            {totals.discountCents > 0 ? (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Desconto</Text>
+                <Text style={[styles.summaryValue, { color: colors.warning }]}>
+                  - {formatCentsToBRL(totals.discountCents)}
+                </Text>
+              </View>
+            ) : null}
+
+            <View style={styles.summaryDivider} />
+
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryTotalLabel}>Total da venda</Text>
+              <MoneyText cents={totals.totalCents} size="lg" tone="primary" />
+            </View>
+
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryCaption}>Lucro estimado na venda</Text>
+              <Text style={styles.summaryProfitText}>
+                {formatCentsToBRL(totals.estimatedProfitCents)}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.actionsColumn}>
+            <PrimaryButton
+              label="Finalizar e confirmar venda"
+              iconName="checkmark-circle-outline"
+              loading={isSubmitting}
+              onPress={() => {
+                void handleSubmit(true);
+              }}
+            />
+            <SecondaryButton
+              label={
+                isEditingDraft
+                  ? "Salvar alterações no rascunho"
+                  : "Salvar como rascunho"
+              }
+              iconName="document-text-outline"
+              disabled={isSubmitting}
+              onPress={() => {
+                void handleSubmit(false);
+              }}
+            />
+          </View>
+        </View>
+
+        <BarcodeScannerModal
+          visible={scannerModalOpen}
+          title="Adicionar produto por código"
+          subtitle="Aponte a câmera para o código de barras do produto para incluí-lo no carrinho"
+          onScanned={handleBarcodeScannedInSale}
+          onClose={() => setScannerModalOpen(false)}
+        />
+
+        <Modal
+          visible={editingPriceItem !== null}
+          transparent
+          animationType="fade"
+          onRequestClose={handleCloseEditPriceModal}
+        >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={styles.modalBackdrop}
+          >
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeaderRow}>
+                <View style={styles.modalTitleRow}>
+                  <View style={styles.modalIconCircle}>
+                    <Ionicons
+                      name="pricetag-outline"
+                      size={20}
+                      color={colors.primaryDark}
+                    />
+                  </View>
+                  <View style={styles.modalTitleCol}>
+                    <Text style={styles.modalTitle}>
+                      Preço unitário nesta venda
                     </Text>
-                  </Text>
-                  <Text style={styles.modalMetaDot}>•</Text>
-                  <Text style={styles.modalMetaText}>
-                    Custo:{' '}
-                    <Text style={styles.modalMetaStrong}>
-                      {formatCentsToBRL(editingPriceItem.unitCostCents)}
+                    <Text style={styles.modalSubtitle} numberOfLines={1}>
+                      {editingPriceItem?.productName ?? ""}
                     </Text>
-                  </Text>
-                  <Text style={styles.modalMetaDot}>•</Text>
-                  <Text style={styles.modalMetaText}>
-                    Qtd.:{' '}
-                    <Text style={styles.modalMetaStrong}>
-                      {editingPriceItem.quantity} un.
-                    </Text>
-                  </Text>
+                  </View>
                 </View>
-
-                <FormField
-                  label="Novo preço unitário (R$) *"
-                  placeholder="0,00"
-                  keyboardType="numeric"
-                  autoFocus
-                  value={editingPriceInput}
-                  errorMessage={editingPriceError ?? undefined}
-                  helperText="Altera apenas nesta venda. O preço do catálogo permanece intacto."
-                  onChangeText={(val) => {
-                    setEditingPriceInput(maskBRLCurrencyInput(val));
-                    setEditingPriceError(null);
-                  }}
-                />
-
-                {(() => {
-                  const previewUnitCents =
-                    parseBRLInputToCents(editingPriceInput) ?? 0;
-                  const previewSubtotalCents = Math.round(
-                    editingPriceItem.quantity * previewUnitCents,
-                  );
-                  const previewProfitCents =
-                    previewUnitCents - editingPriceItem.unitCostCents;
-                  return (
-                    <View style={styles.modalPreviewBox}>
-                      <View style={styles.modalPreviewRow}>
-                        <Text style={styles.modalPreviewLabel}>
-                          Subtotal do item ({editingPriceItem.quantity} un.)
-                        </Text>
-                        <Text style={styles.modalPreviewValue}>
-                          {formatCentsToBRL(previewSubtotalCents)}
-                        </Text>
-                      </View>
-                      <View style={styles.modalPreviewRow}>
-                        <Text style={styles.modalPreviewLabel}>
-                          Lucro unitário estimado
-                        </Text>
-                        <Text
-                          style={[
-                            styles.modalPreviewValue,
-                            {
-                              color:
-                                previewProfitCents >= 0
-                                  ? colors.success
-                                  : colors.error,
-                            },
-                          ]}
-                        >
-                          {formatCentsToBRL(previewProfitCents)}
-                        </Text>
-                      </View>
-                    </View>
-                  );
-                })()}
-
-                <View style={styles.modalActionsCol}>
-                  <PrimaryButton
-                    label="Aplicar preço na venda"
-                    iconName="checkmark-circle-outline"
-                    onPress={handleApplyCustomPrice}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Fechar"
+                  onPress={handleCloseEditPriceModal}
+                  style={styles.modalCloseBtn}
+                >
+                  <Ionicons
+                    name="close"
+                    size={20}
+                    color={colors.textSecondary}
                   />
-                  {editingPriceItem.unitPriceCents !==
-                    (editingPriceItem.catalogPriceCents ??
-                      editingPriceItem.unitPriceCents) ||
-                  (parseBRLInputToCents(editingPriceInput) ?? 0) !==
-                    (editingPriceItem.catalogPriceCents ??
-                      editingPriceItem.unitPriceCents) ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={handleRestoreCatalogPrice}
-                      style={styles.modalResetPriceBtn}
-                    >
-                      <Ionicons
-                        name="refresh-outline"
-                        size={16}
-                        color={colors.primaryDark}
-                      />
-                      <Text style={styles.modalResetPriceBtnText}>
-                        Restaurar preço de tabela (
+                </Pressable>
+              </View>
+
+              {editingPriceItem ? (
+                <>
+                  <View style={styles.modalMetaRow}>
+                    <Text style={styles.modalMetaText}>
+                      Tabela:{" "}
+                      <Text style={styles.modalMetaStrong}>
                         {formatCentsToBRL(
                           editingPriceItem.catalogPriceCents ??
                             editingPriceItem.unitPriceCents,
                         )}
-                        )
                       </Text>
-                    </Pressable>
-                  ) : null}
-                  <SecondaryButton
-                    label="Cancelar"
-                    onPress={handleCloseEditPriceModal}
+                    </Text>
+                    <Text style={styles.modalMetaDot}>•</Text>
+                    <Text style={styles.modalMetaText}>
+                      Custo:{" "}
+                      <Text style={styles.modalMetaStrong}>
+                        {formatCentsToBRL(editingPriceItem.unitCostCents)}
+                      </Text>
+                    </Text>
+                    <Text style={styles.modalMetaDot}>•</Text>
+                    <Text style={styles.modalMetaText}>
+                      Qtd.:{" "}
+                      <Text style={styles.modalMetaStrong}>
+                        {editingPriceItem.quantity} un.
+                      </Text>
+                    </Text>
+                  </View>
+
+                  <FormField
+                    label="Novo preço unitário (R$) *"
+                    placeholder="0,00"
+                    keyboardType="numeric"
+                    autoFocus
+                    value={editingPriceInput}
+                    errorMessage={editingPriceError ?? undefined}
+                    helperText="Altera apenas nesta venda. O preço do catálogo permanece intacto."
+                    onChangeText={(val) => {
+                      setEditingPriceInput(maskBRLCurrencyInput(val));
+                      setEditingPriceError(null);
+                    }}
                   />
-                </View>
-              </>
-            ) : null}
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+
+                  {(() => {
+                    const previewUnitCents =
+                      parseBRLInputToCents(editingPriceInput) ?? 0;
+                    const previewSubtotalCents = Math.round(
+                      editingPriceItem.quantity * previewUnitCents,
+                    );
+                    const previewProfitCents =
+                      previewUnitCents - editingPriceItem.unitCostCents;
+                    return (
+                      <View style={styles.modalPreviewBox}>
+                        <View style={styles.modalPreviewRow}>
+                          <Text style={styles.modalPreviewLabel}>
+                            Subtotal do item ({editingPriceItem.quantity} un.)
+                          </Text>
+                          <Text style={styles.modalPreviewValue}>
+                            {formatCentsToBRL(previewSubtotalCents)}
+                          </Text>
+                        </View>
+                        <View style={styles.modalPreviewRow}>
+                          <Text style={styles.modalPreviewLabel}>
+                            Lucro unitário estimado
+                          </Text>
+                          <Text
+                            style={[
+                              styles.modalPreviewValue,
+                              {
+                                color:
+                                  previewProfitCents >= 0
+                                    ? colors.success
+                                    : colors.error,
+                              },
+                            ]}
+                          >
+                            {formatCentsToBRL(previewProfitCents)}
+                          </Text>
+                        </View>
+                      </View>
+                    );
+                  })()}
+
+                  <View style={styles.modalActionsCol}>
+                    <PrimaryButton
+                      label="Aplicar preço na venda"
+                      iconName="checkmark-circle-outline"
+                      onPress={handleApplyCustomPrice}
+                    />
+                    {editingPriceItem.unitPriceCents !==
+                      (editingPriceItem.catalogPriceCents ??
+                        editingPriceItem.unitPriceCents) ||
+                    (parseBRLInputToCents(editingPriceInput) ?? 0) !==
+                      (editingPriceItem.catalogPriceCents ??
+                        editingPriceItem.unitPriceCents) ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={handleRestoreCatalogPrice}
+                        style={styles.modalResetPriceBtn}
+                      >
+                        <Ionicons
+                          name="refresh-outline"
+                          size={16}
+                          color={colors.primaryDark}
+                        />
+                        <Text style={styles.modalResetPriceBtnText}>
+                          Restaurar preço de tabela (
+                          {formatCentsToBRL(
+                            editingPriceItem.catalogPriceCents ??
+                              editingPriceItem.unitPriceCents,
+                          )}
+                          )
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                    <SecondaryButton
+                      label="Cancelar"
+                      onPress={handleCloseEditPriceModal}
+                    />
+                  </View>
+                </>
+              ) : null}
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
+
+        <CustomerPickerModal
+          visible={customerPickerOpen}
+          onClose={() => setCustomerPickerOpen(false)}
+          customers={customers}
+          selectedCustomerId={selectedCustomerId}
+          onSelectCustomer={(cust) =>
+            setSelectedCustomerId(cust ? cust.id : null)
+          }
+          onAddNewCustomer={() => router.push("/customers/new")}
+        />
+
+        <ProductPickerModal
+          visible={productPickerOpen}
+          onClose={() => setProductPickerOpen(false)}
+          products={products}
+          mode="cart"
+          cartItems={cart}
+          onAddOrIncrementCart={(product) => {
+            setCart((prev) => addOrIncrementCartItem(prev, product, 1));
+          }}
+          onDecrementCart={(productId) => {
+            setCart((prev) => {
+              const found = prev.find((c) => c.productId === productId);
+              if (!found) return prev;
+              return updateCartItemQuantity(
+                prev,
+                productId,
+                found.quantity - 1,
+              );
+            });
+          }}
+          onOpenScanner={() => setScannerModalOpen(true)}
+        />
       </Screen>
       <ToastOverlay toast={toast} onDismiss={hideToast} />
     </>
@@ -1395,15 +1314,15 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: spacing.md,
     gap: spacing.sm,
   },
   barcodeScanActionBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing.sm,
     backgroundColor: colors.primarySoft,
     borderRadius: radius.controlLg,
@@ -1420,8 +1339,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     flexShrink: 0,
   },
   barcodeScanActionTextCol: {
@@ -1430,7 +1349,7 @@ const styles = StyleSheet.create({
   },
   barcodeScanActionTitle: {
     ...typography.caption,
-    fontWeight: '700',
+    fontWeight: "700",
     color: colors.primaryDark,
   },
   barcodeScanActionSub: {
@@ -1444,12 +1363,12 @@ const styles = StyleSheet.create({
   },
   linkActionText: {
     ...typography.caption,
-    fontWeight: '600',
+    fontWeight: "600",
     color: colors.error,
   },
   selectedCustomerBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: colors.primarySoft,
     borderRadius: radius.control,
     borderWidth: 1,
@@ -1462,8 +1381,8 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: radius.pill,
     backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   customerAvatarText: {
     ...typography.bodyStrong,
@@ -1482,9 +1401,9 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   walkInBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     backgroundColor: colors.background,
     borderRadius: radius.control,
     borderWidth: 1,
@@ -1493,8 +1412,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   walkInInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing.sm,
     flex: 1,
   },
@@ -1513,46 +1432,75 @@ const styles = StyleSheet.create({
   },
   pillButtonText: {
     ...typography.caption,
-    fontWeight: '600',
+    fontWeight: "600",
     color: colors.primaryDark,
   },
-  pickerBox: {
-    gap: spacing.xs,
+  pillButtonPrimary: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primary,
   },
-  optionList: {
-    gap: spacing.xs,
+  pillButtonPrimaryText: {
+    ...typography.caption,
+    fontWeight: "700",
+    color: colors.white,
   },
-  optionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.background,
+  addMoreItemsButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1,
+    borderColor: colors.primary,
     borderRadius: radius.control,
+    paddingVertical: spacing.md,
+    marginTop: spacing.xs,
+  },
+  addMoreItemsButtonText: {
+    ...typography.body,
+    fontWeight: "600",
+    color: colors.primaryDark,
+  },
+  emptyCartNotice: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.background,
+    borderRadius: radius.controlLg,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.md,
-    gap: spacing.sm,
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.lg,
+    gap: spacing.xs,
   },
-  optionItemSelected: {
-    backgroundColor: colors.primarySoft,
-    borderColor: colors.primary,
-  },
-  optionTextCol: {
-    flex: 1,
-    gap: 2,
-  },
-  optionItemTitle: {
+  emptyCartTitle: {
     ...typography.bodyStrong,
     color: colors.text,
+    marginTop: spacing.xs,
   },
-  optionItemSub: {
+  emptyCartText: {
     ...typography.caption,
     color: colors.textSecondary,
+    textAlign: "center",
+    marginBottom: spacing.md,
   },
-  addProductRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  emptyCartActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing.xs,
+    backgroundColor: colors.primary,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+  },
+  emptyCartActionBtnText: {
+    ...typography.caption,
+    fontWeight: "700",
+    color: colors.white,
   },
   cartList: {
     gap: spacing.sm,
@@ -1571,9 +1519,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.errorSoft,
   },
   cartItemTop: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
     gap: spacing.sm,
   },
   cartItemInfo: {
@@ -1590,18 +1538,18 @@ const styles = StyleSheet.create({
   },
   customPriceNoticeText: {
     ...typography.caption,
-    fontWeight: '600',
+    fontWeight: "600",
     color: colors.primaryDark,
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(23, 33, 29, 0.55)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "rgba(23, 33, 29, 0.55)",
+    alignItems: "center",
+    justifyContent: "center",
     padding: spacing.xl,
   },
   modalCard: {
-    width: '100%',
+    width: "100%",
     maxWidth: 420,
     backgroundColor: colors.surface,
     borderRadius: radius.cardLg,
@@ -1611,14 +1559,14 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   modalHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     gap: spacing.sm,
   },
   modalTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing.sm,
     flex: 1,
   },
@@ -1627,8 +1575,8 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: radius.pill,
     backgroundColor: colors.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     flexShrink: 0,
   },
   modalTitleCol: {
@@ -1648,13 +1596,13 @@ const styles = StyleSheet.create({
     height: 34,
     borderRadius: radius.pill,
     backgroundColor: colors.background,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   modalMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
     gap: 6,
     backgroundColor: colors.background,
     borderRadius: radius.control,
@@ -1668,7 +1616,7 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   modalMetaStrong: {
-    fontWeight: '700',
+    fontWeight: "700",
     color: colors.text,
   },
   modalMetaDot: {
@@ -1684,9 +1632,9 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   modalPreviewRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     gap: spacing.sm,
   },
   modalPreviewLabel: {
@@ -1702,9 +1650,9 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   modalResetPriceBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 6,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
@@ -1715,25 +1663,25 @@ const styles = StyleSheet.create({
   },
   modalResetPriceBtnText: {
     ...typography.caption,
-    fontWeight: '700',
+    fontWeight: "700",
     color: colors.primaryDark,
   },
   cartItemControlsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     gap: spacing.sm,
   },
   cartItemLeftActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
     gap: spacing.xs,
     flex: 1,
   },
   editUnitPricePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 4,
     paddingHorizontal: spacing.sm,
     paddingVertical: 5,
@@ -1748,7 +1696,7 @@ const styles = StyleSheet.create({
   },
   editUnitPricePillText: {
     ...typography.caption,
-    fontWeight: '600',
+    fontWeight: "600",
     color: colors.primaryDark,
   },
   cartItemSubText: {
@@ -1756,8 +1704,8 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   stepperRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing.sm,
     backgroundColor: colors.surface,
     borderRadius: radius.pill,
@@ -1770,36 +1718,17 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   stepperQtyText: {
     ...typography.bodyStrong,
     color: colors.text,
     minWidth: 24,
-    textAlign: 'center',
-  },
-  emptyCartNotice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.background,
-    borderRadius: radius.control,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-  },
-  emptyCartText: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    flex: 1,
-  },
-  catalogPickerWrap: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: spacing.md,
+    textAlign: "center",
   },
   modeSelectorRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: spacing.sm,
     marginTop: spacing.md,
     marginBottom: spacing.md,
@@ -1830,13 +1759,13 @@ const styles = StyleSheet.create({
   },
   subLabel: {
     ...typography.caption,
-    fontWeight: '600',
+    fontWeight: "600",
     color: colors.text,
     marginBottom: spacing.xs,
   },
   chipGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: spacing.xs,
     marginBottom: spacing.md,
   },
@@ -1854,7 +1783,7 @@ const styles = StyleSheet.create({
   },
   methodChipText: {
     ...typography.caption,
-    fontWeight: '600',
+    fontWeight: "600",
     color: colors.textSecondary,
   },
   methodChipTextSelected: {
@@ -1866,7 +1795,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
   },
   twoCols: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: spacing.sm,
   },
   halfCol: {
@@ -1882,14 +1811,14 @@ const styles = StyleSheet.create({
   },
   previewScheduleTitle: {
     ...typography.caption,
-    fontWeight: '700',
+    fontWeight: "700",
     color: colors.text,
     marginBottom: 2,
   },
   previewScheduleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     gap: spacing.sm,
   },
   previewScheduleLabel: {
@@ -1899,13 +1828,13 @@ const styles = StyleSheet.create({
   },
   previewScheduleAmount: {
     ...typography.caption,
-    fontWeight: '700',
+    fontWeight: "700",
     color: colors.primaryDark,
   },
   previewMoreText: {
     ...typography.caption,
     color: colors.textSecondary,
-    fontStyle: 'italic',
+    fontStyle: "italic",
   },
   summaryBox: {
     backgroundColor: colors.primarySoft,
@@ -1917,9 +1846,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   summaryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   summaryLabel: {
     ...typography.body,
@@ -1944,7 +1873,7 @@ const styles = StyleSheet.create({
   },
   summaryProfitText: {
     ...typography.caption,
-    fontWeight: '700',
+    fontWeight: "700",
     color: colors.primaryDark,
   },
   actionsColumn: {
